@@ -893,8 +893,6 @@ HTML = r"""<!doctype html>
       <div id="mets">
         <button data-m="inf" class="on">influence</button>
         <button data-m="do">Δ influence</button>
-        <button data-m="cen">centrality</button>
-        <button data-m="dc">Δ centrality</button>
       </div>
       <div id="rowbox"><div id="rowinner"></div></div>
     </div>
@@ -974,10 +972,9 @@ const SER={};
 function series(g){
   const key=g+'|'+mode;
   if(SER[key]) return SER[key];
-  const n=NA(g), frames=[], degs=[];
-  for(let k=0;k<n;k++){ const r=computeG(g,k);
-    frames.push(r.pr); degs.push(r.inS.map((v,i)=>v+r.outS[i])); }
-  return SER[key]={frames,degs};
+  const n=NA(g), frames=[];
+  for(let k=0;k<n;k++) frames.push(computeG(g,k).pr);
+  return SER[key]={frames};
 }
 function tFrac(){ return NA()>1 ? t/(NA()-1) : 0; }
 function frameOn(g){ return Math.max(0,Math.min(NA(g)-1,Math.round(tFrac()*(NA(g)-1)))); }
@@ -1110,11 +1107,9 @@ function rowsHot(){ rowEls.forEach((r,i)=>r.classList.toggle('hot',i===hover)); 
 function metricVals(){
   const N=D.nodes.length;
   if(metric==='inf'){ return (ST||compute()).pr.slice(); }
-  if(metric==='cen'){ const {inS,outS}=ST||compute(); return inS.map((v,i)=>v+outS[i]); }
-  const S=series(gran), k=frameOn(gran);   // deltas: change since program start
-  const A=metric==='do'?S.frames:S.degs;   // 'do' = Δ influence, 'dc' = Δ centrality
+  const S=series(gran), k=frameOn(gran);   // 'do': Δ influence since program start
   const out=new Array(N);
-  for(let i=0;i<N;i++) out[i]=A[k][i]-A[0][i];
+  for(let i=0;i<N;i++) out[i]=S.frames[k][i]-S.frames[0][i];
   return out;
 }
 let lastStockKey='';
@@ -1129,9 +1124,8 @@ function updateStocks(force){
   rowEls.forEach((r,i)=>{
     r.style.transform=`translateY(${rank[i]*ROWH}px)`;
     const b=r.querySelector('.badge');
-    const scale=(metric==='inf'||metric==='do')?10:1;   // pr is mass-scaled; degree is raw
-    if(metric==='inf'||metric==='cen'){ b.className='badge inf'; b.textContent=(vals[i]*scale).toFixed(1); }
-    else{ const v=vals[i]*scale;
+    if(metric==='inf'){ b.className='badge inf'; b.textContent=(vals[i]*10).toFixed(1); }
+    else{ const v=vals[i]*10;
       b.className='badge '+(v>0.05?'up':(v<-0.05?'dn':''));
       b.textContent=(v>0?'+':'')+v.toFixed(1); }
   });
