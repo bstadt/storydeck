@@ -62,7 +62,8 @@ def _authed():
 def _gate():
     if not os.environ.get("STORYDECK_PASSWORD"):
         return None                     # no password configured (local dev): open
-    if request.path in PUBLIC_PATHS or _authed():
+    # /lib/ is vendored public library code (three.js) needed by the landing
+    if request.path in PUBLIC_PATHS or request.path.startswith("/lib/") or _authed():
         return None
     if request.path.startswith("/api/"):
         return jsonify({"error": "locked"}), 401
