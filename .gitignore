@@ -1,0 +1,11 @@
+.env
+data/
+viewer/data/
+figures/
+__pycache__/
+*.pyc
+# ssh key material (keys live in ~/.ssh, never commit)
+*.pem
+*_poll
+*_poll.pub
+id_*

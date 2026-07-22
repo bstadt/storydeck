@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Storydeck | Stories</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #08090c; --panel: rgba(16,18,24,.92); --border: #23262e;
+    --ink: #e8e6df; --ink-2: #9a9890; --ink-3: #5d5c56;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  #hud { position: fixed; top: 0; left: 0; right: 0; padding: 14px 20px 10px; z-index: 10;
+         display: flex; align-items: center; gap: 14px; pointer-events: none;
+         background: var(--bg); border-bottom: 1px solid var(--border); }
+  #hud > * { pointer-events: auto; }
+  #brand { display: flex; align-items: center; height: 30px; }
+  #brandword { font: 700 15px/30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; letter-spacing: .01em;
+               user-select: none; white-space: nowrap; }
+  #tabs { display: flex; align-items: center; gap: 6px; margin-left: 12px; }
+  #tabs a, #tabs span { font-size: 11.5px; padding: 4px 12px; border: 1px solid var(--border);
+     border-radius: 7px; color: var(--ink-2); text-decoration: none; background: var(--panel); white-space: nowrap; }
+  #tabs span.cur { background: var(--ink); color: #0b0b0b; border-color: var(--ink); font-weight: 600; }
+  @keyframes pulseBlue {
+    0%,100% { box-shadow: 0 0 0 0 rgba(77,148,232,0); border-color: var(--border); }
+    50% { box-shadow: 0 0 16px 2px rgba(77,148,232,.55); border-color: #4d94e8; }
+  }
+  .dd-label { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3);
+              margin: 8px 2px 4px; }
+  .dd-label.sep { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .subj.pot { opacity: .78; }
+  .subj .act { font-size: 10px; color: var(--ink-3); }
+  .subj:hover .act { color: var(--c-team); }
+  #dd-status { font-size: 11.5px; color: var(--ink-2); margin: 6px 2px 0; min-height: 14px; }
+  #dd-status .spin { display: inline-block; width: 9px; height: 9px; border: 2px solid var(--border);
+                     border-top-color: var(--c-team); border-radius: 50%; margin-right: 6px;
+                     animation: sp .7s linear infinite; vertical-align: -1px; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  #tagline { font-size: 10.5px; color: var(--ink-3); letter-spacing: .1em; text-transform: uppercase; }
+
+  #picker { margin-left: auto; position: relative; }
+  #q { width: 240px; height: 30px; box-sizing: border-box; padding: 6px 12px;
+       font-size: 12.5px; background: var(--panel); border: 1px solid var(--border);
+       border-radius: 8px; color: var(--ink); outline: none; -webkit-appearance: none; }
+  /* the type=search clear button appears once text exists and nudges the box */
+  #q::-webkit-search-cancel-button, #q::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+  #q:focus { border-color: #2b3a52; }
+  /* dropdown reads as an extension of the search box: same width, flush
+     under it, shared border with the input's bottom corners squared off */
+  #dd { position: absolute; top: 100%; left: 0; right: 0; margin-top: -1px; max-height: 78vh;
+        z-index: 40; background: var(--panel); border: 1px solid var(--border);
+        border-radius: 0 0 8px 8px; border-top: 1px solid rgba(43,58,82,.45);
+        padding: 8px; display: none; flex-direction: column; backdrop-filter: blur(8px); }
+  #dd.open { display: flex; }
+  #picker.open #q { border-radius: 8px 8px 0 0; }
+  /* cap the active list so it scrolls internally — with many active subjects it
+     must not push the "Activate a subject" search + potential list out of view */
+  #active-list { max-height: 26vh; overflow-y: auto; }
+  #hint-fixed { position: fixed; bottom: 12px; left: 16px; z-index: 10; font-size: 11px; color: var(--ink-3); }
+  .subj { display: flex; justify-content: space-between; gap: 6px; padding: 3px 7px;
+          border-radius: 6px; cursor: pointer; font-size: 12.5px; align-items: baseline; }
+  .subj:hover { background: rgba(255,255,255,.05); }
+  .subj.active { background: var(--ink); color: #0b0b0b; font-weight: 600; }
+  .subj .n { font-size: 10.5px; color: var(--ink-3); }
+  .subj.active .n { color: #444; }
+  .dot { width: 8px; height: 8px; border-radius: 3px; display: inline-block; margin-right: 6px; }
+  .hint { font-size: 11px; color: var(--ink-3); margin-top: 6px; }
+  /* checkbox on active rows: check up to 2 to build a relationship deck */
+  .subj .ck { width: 13px; height: 13px; border: 1.5px solid var(--ink-3); border-radius: 3px;
+              display: inline-flex; align-items: center; justify-content: center; margin-right: 7px;
+              flex: 0 0 auto; font-size: 10px; line-height: 1; }
+  .subj.on .ck { background: var(--ink); border-color: var(--ink); color: #0b0b0b; }
+  .subj.dim { opacity: .5; }
+  .subj .right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  .subj .rm { color: var(--ink-3); font-size: 14px; line-height: 1; width: 13px; text-align: center;
+              opacity: 0; cursor: pointer; }
+  .subj:hover .rm { opacity: .6; }
+  .subj .rm:hover { opacity: 1; color: #ef6a68; }
+  .subj .lbl { display: flex; align-items: center; min-width: 0; }
+  .subj .lbl .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* relationship panel header */
+  .rel-head { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+  .rel-traj { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .rel-traj b { text-transform: capitalize; font-size: 14px; }
+  .rel-arrow { font-size: 17px; color: var(--ink); }
+  .rel-char { font-size: 10px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2);
+              border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; }
+  .rel-char.pending { color: var(--ink-3); font-style: italic; text-transform: none; letter-spacing: 0; }
+  .rel-tabs { display: flex; gap: 6px; }
+  .rel-tabs button { font: inherit; font-size: 11px; padding: 3px 12px; border: 1px solid var(--border);
+                     border-radius: 11px; background: transparent; color: var(--ink-2); cursor: pointer; }
+  .rel-tabs button.on { background: var(--ink); color: #0b0b0b; font-weight: 600; }
+  .rel-charline { margin-bottom: 8px; }
+  .cp-chart { margin: 4px 0 10px; }
+  .rel-sub { font-size: 10.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+  .rel-spark { margin: 8px 0 6px; }
+  .rel-stats { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--ink-2); }
+  .rel-stats i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 5px;
+                 vertical-align: middle; }
+  .rel-summary { color: var(--ink-2); font-style: italic; margin: 4px 0 10px; }
+
+  #reader { position: fixed; top: 68px; right: 14px; width: 400px; bottom: 14px; z-index: 10;
+            background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+            padding: 14px; display: none; flex-direction: column; backdrop-filter: blur(6px); }
+  #reader.open { display: flex; }
+  #reader.dd-hidden { display: none; }
+  #reader h3 { font-size: 13px; margin: 0 0 2px; }
+  #reader .meta { font-size: 11px; color: var(--ink-2); margin-bottom: 8px; }
+  #reader .nav { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+  #reader .nav button { font-size: 11px; padding: 3px 10px; background: #0d0f14; color: var(--ink-2);
+                        border: 1px solid var(--border); border-radius: 6px; cursor: pointer; }
+  #reader .nav .pos { font-size: 11px; color: var(--ink-3); margin-left: auto; }
+  .strand { font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.7;
+    color: var(--ink-2); background: #0d0f14; border: 1px solid #23283322; border-left: 2px solid var(--subj, #4d94e8);
+    padding: 7px 9px; border-radius: 4px; margin: 0 0 12px; }
+  .strand .arw { color: var(--subj, #4d94e8); }
+  .s-line { border-radius: 3px; padding: 0 1px; transition: background .1s; }
+  .s-line.hot { background: color-mix(in srgb, var(--subj, #4d94e8) 22%, transparent); }
+  #r-summary { font-size: 12px; line-height: 1.55; color: var(--ink); margin: 0 0 10px;
+               padding: 9px 11px; border-left: 2px solid var(--subj, #4d94e8);
+               background: color-mix(in srgb, var(--subj, #4d94e8) 8%, transparent); border-radius: 0 6px 6px 0; }
+  #r-summary .note { display: block; margin-top: 6px; color: var(--ink-3); font-size: 11px; }
+  #r-segs { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .seg-chip { font-size: 11px; padding: 2px 9px; border: 1px solid var(--border); border-radius: 11px;
+              background: #0d0f14; color: var(--ink-2); cursor: pointer; max-width: 100%;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .seg-chip.on { background: var(--ink); color: #0b0b0b; font-weight: 600; }
+  #seg { overflow-y: auto; flex: 1; font-size: 12.5px; line-height: 1.65;
+         scrollbar-width: none; -ms-overflow-style: none; }
+  #seg::-webkit-scrollbar { display: none; }
+  #active-list { scrollbar-width: none; -ms-overflow-style: none; }
+  #active-list::-webkit-scrollbar { display: none; }
+  #seg p { margin: 0 0 10px; white-space: pre-wrap; }
+  #seg .spk { color: var(--ink-3); font-size: 11px; margin-bottom: -8px; }
+  #seg.focus .txl { opacity: .32; transition: opacity .25s ease; }
+  #seg.focus .txl.inb { opacity: 1; }
+  #seg .txl.turnhot { background: color-mix(in srgb, var(--subj, #4d94e8) 13%, transparent);
+    border-left: 2px solid var(--subj, #4d94e8); padding-left: 6px; border-radius: 3px; }
+  #seg .txl.inb.first { border-left: 2px solid var(--subj, #4d94e8);
+                        margin-left: -12px; padding-left: 10px; }
+  #seg .txl.spoke { background: color-mix(in srgb, var(--subj, #4d94e8) 8%, transparent);
+                    border-radius: 3px; }
+  #seg .txl.spoke.spk { color: var(--subj, #4d94e8); }
+  #seg mark { background: transparent; color: inherit; border-bottom: 2px solid; padding: 0 1px; }
+  .arc-beat { cursor: pointer; border-radius: 4px; padding: 0 1px;
+              transition: background .18s ease; }
+  .arc-beat.hot { background: color-mix(in srgb, var(--subj, #4d94e8) 28%, transparent); }
+  .arc-beat.pin { background: color-mix(in srgb, var(--subj, #4d94e8) 40%, transparent);
+                  box-shadow: 0 1px 0 var(--subj, #4d94e8); }
+  #beat-ground { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 5px; }
+  #tip { position: fixed; pointer-events: none; background: rgba(10,11,14,.95); color: var(--ink);
+         border: 1px solid var(--border); font-size: 11.5px; padding: 4px 9px; border-radius: 6px;
+         z-index: 30; display: none; max-width: 340px; line-height: 1.45; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hud">
+  <div id="brand">
+    <span id="brandword">Storydeck</span>
+    <nav id="tabs">
+      <span class="cur">stories</span>
+      <a href="geometry.html">geometry</a>
+      <a href="query.html">query</a>
+      <a href="api/stories.zip" download>export</a>
+    </nav>
+  </div>
+  <div id="tagline"></div>
+  <div id="picker">
+    <input type="search" id="q" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="search subjects…">
+    <div id="dd">
+      <div id="active-list"></div>
+      <div id="dd-status"></div>
+    </div>
+  </div>
+</div>
+
+<div id="reader">
+  <h3 id="r-title"></h3>
+  <div class="meta" id="r-meta"></div>
+  <div class="nav">
+    <span class="pos" id="r-pos"></span>
+  </div>
+  <div id="r-summary" style="display:none"></div>
+  <div id="r-segs"></div>
+  <div id="seg"></div>
+</div>
+<div id="tip"></div>
+
+<script type="importmap">
+{ "imports": { "three": "./lib/three.module.js", "three/addons/controls/OrbitControls.js": "./lib/OrbitControls.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+const TYPE_COLORS = { team:0x4d94e8, product:0xf08a56, technology:0x8b7ce8, concept:0x2fd39a,
+  meme:0xf291b9, person:0xf0b429, org:0x3fae3f, event:0xef6a68 };
+const TYPE_CSS = { team:'#4d94e8', product:'#f08a56', technology:'#8b7ce8', concept:'#2fd39a',
+  meme:'#f291b9', person:'#f0b429', org:'#3fae3f', event:'#ef6a68' };
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const META_RE = [
+  /^_backfilled from vault-recon/i, /^_.*unedited.*_\s*$/i, /^-{2,}\s*$/,
+  /^(summary keywords|speakers?|📝\s*notes|attachments|chapters|outline|action items|transcript|notes)\s*$/i,
+  /^source:/i, /^interview transcript\b/i, /^meeting title:/i, /^meeting type:/i,
+  /^host:/i, /^captured:/i, /^diarization/i, /^presentation template/i,
+  /^transcription ended after/i, /^\*\*(meeting type|host|captured|diarization|presentation template)/i,
+  /^[a-z]{3},?\s+\w+\s+\d+,?\s+20\d\d/i, /^\d{1,2}:\d\d:\d\d\s*$/,
+  /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d+,?\s+20\d\d\s*$/i,
+  /^# /, /^invited\b/i,
+];
+const isMetaLine = l => { const t = l.trim(); return META_RE.some(r => r.test(t)); };
+const SPK_RE = /^\S.{0,39}\s\d+:\d\d(:\d\d)?\s*$/;
+const tip = document.getElementById('tip');
+
+// ---------------- scene ----------------
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x08090c);
+let viewSize = 46, targetViewSize = 46;
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 2000);
+function setFrustum() {
+  const a = innerWidth / innerHeight;
+  camera.left = -viewSize * a; camera.right = viewSize * a;
+  camera.top = viewSize; camera.bottom = -viewSize;
+  camera.updateProjectionMatrix();
+}
+const deg = THREE.MathUtils.degToRad;
+const ISO = new THREE.Vector3(Math.cos(deg(15)) * Math.sin(deg(45)), Math.sin(deg(15)),
+  Math.cos(deg(15)) * Math.cos(deg(45))).normalize();
+camera.position.copy(ISO.clone().multiplyScalar(400));
+setFrustum();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+stage.appendChild(renderer.domElement);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.enableRotate = false;
+controls.enablePan = false;
+controls.enableZoom = false;
+controls.target.set(0, 8, 0);
+const SCREEN_RIGHT = new THREE.Vector3(ISO.z, 0, -ISO.x).normalize();
+// scratch objects for the focused-card face-camera transform (avoid per-frame alloc)
+const _camDir = new THREE.Vector3(), _rc = new THREE.Vector3(), _tgt = new THREE.Vector3(), _pv = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _dummy = new THREE.Object3D(), _faceQuat = new THREE.Quaternion(), _IDENT = new THREE.Quaternion();
+const _colA = new THREE.Color(), _colB = new THREE.Color();
+let viewGoal = null;   // when set, the camera glides (pans) toward it each frame
+function setViewTarget(t) {
+  viewGoal = null;   // instant move cancels any pending glide
+  const delta = t.clone().sub(controls.target);
+  controls.target.copy(t);
+  camera.position.add(delta);
+}
+function setViewTargetSmooth(t) { viewGoal = t.clone(); }
+addEventListener('resize', () => { setFrustum(); renderer.setSize(innerWidth, innerHeight); });
+scene.add(new THREE.AmbientLight(0xffffff, 1.6));
+
+// ---------------- data ----------------
+const DATA = await (await fetch('data/showcase.json')).json();
+const T = DATA.transcripts;
+// per-transcript mined triples: { transcriptId: [[subject, relation, object, certainty], ...] }
+const TRIP = await (await fetch('data/triples.json')).json();
+// verified per-subject alias specs { cid: {stems:[...], exclude:[...]} }
+const ALIAS = await (await fetch('data/aliases.json')).json();
+// triplet-based Isaacson stories { cid: markdown }
+const STORIES = await (await fetch('data/stories.json')).json();
+// per-transcript extraction summaries { tid: summary }
+const SUMM = await (await fetch('data/summaries.json')).json();
+const LSP = fetch('data/langshare.json').then(r => r.json()).then(ls => { window.__canon = ls.canon; });
+let NARR = {};
+fetch('data/narratives.json').then(r => r.ok ? r.json() : {}).then(n => { NARR = n; refreshPanel(); }).catch(() => {});
+let REL = {};
+function loadRel() {
+  return fetch('data/relationships.json?_=' + Date.now()).then(r => r.ok ? r.json() : {})
+    .then(n => { REL = n; }).catch(() => { REL = {}; });
+}
+loadRel();
+const relKey = (a, b) => [a, b].sort().join('__');
+let REG = { subjects: {} };
+function loadRegistry() {
+  return fetch('api/registry').then(r => r.json()).then(g => { REG = g; renderActive(); })
+    .catch(() => { REG = { subjects: {} }; });
+}
+const isActive = id => REG.subjects[id] && REG.subjects[id].status === 'active';
+const subjCss = id => (REG.subjects[id] && REG.subjects[id].color) || TYPE_CSS[DATA.subjects[id] && DATA.subjects[id].type] || '#888';
+const subjHex = id => { const c = REG.subjects[id] && REG.subjects[id].color; return c ? parseInt(c.slice(1), 16) : (TYPE_COLORS[DATA.subjects[id] && DATA.subjects[id].type] || 0xffffff); };
+
+// ---------------- constants / state ----------------
+const CW = 44, CH = 30, DZ = 16;
+const deck = new THREE.Group();
+scene.add(deck);
+let cards = [];
+let focusIdx = 0, deckTargetZ = 0;
+let connGeo = null;
+let selected = null;             // primary subject (picks[0]); drives single-subject panels
+let picks = [];                  // 1 or 2 checked subjects
+let pairMode = false;
+let layers = [];                 // [{cid, colorHex, css}] currently on the deck
+let mode = 'idle';               // idle | rhizome | tree | node
+let nodeIdx = 0;                 // index into cardHits(focusIdx) while in node mode
+let hits = [];
+let treeTis = [];
+let txIdToCi = {};
+let pinnedBeat = null;
+let glowMeshes = [];
+let threadAlpha = 1;             // connector-thread visibility (fades to 0 on card enter)
+let arcT = 0;                    // long-arc time playhead (float over card index, chronological)
+let arcPlaying = true;           // playhead auto-advances
+let arcSnap = null;              // when set, playhead eases to this card index (story-hover)
+const OPEN_END = 1.35;           // 3 phases: rotate (0-.35) → extrude (.35-1) → content fade-in (1-1.35)
+let openP = OPEN_END;            // deck-open transition progress; OPEN_END = fully open
+let closeP = OPEN_END;           // deck-close (deck → arc) progress: nodes fade → collapse → focused turns
+let openFrom = '';               // where the open started ('rhizome' → extrude the stack; 'node' → cards already spread)
+let arcTarget = 0;               // integer card the playhead is dwelling on / heading to
+let arcHold = 0;                 // frames remaining to hold the current card
+const ARC_DWELL = 75;            // ~1.25s on screen per card (@60fps)
+let nodeMeshes = [];             // every triplet-graph node (for hover reveal)
+let rootMeshes = [];
+let pulseMats = [];
+let threads = [];                // per-layer connector threads: [{geo, ordered}]
+const txCache = {};
+
+// current relationship record (pair mode) or null
+function relFor() { return pairMode && picks.length === 2 ? REL[relKey(picks[0], picks[1])] : null; }
+
+// weekly co-presence trajectory for a pair, computed client-side from grounded hits
+function coTrajectory(a, b) {
+  const setOf = id => { const s = new Set(); for (const h of (DATA.subjects[id]?.hits || [])) s.add(h[0]); return s; };
+  const A = setOf(a), B = setOf(b);
+  const shared = [...A].filter(x => B.has(x)).length;
+  const union = new Set([...A, ...B]).size;
+  const monday = d => { const t = new Date(d + 'T00:00:00Z'); const day = (t.getUTCDay() + 6) % 7;
+    t.setUTCDate(t.getUTCDate() - day); return t.toISOString().slice(0, 10); };
+  const weeks = {};  // wk -> {u, i, a, b}
+  const allTi = new Set([...A, ...B]);
+  for (const ti of allTi) { const wk = monday(T[ti].date); const w = weeks[wk] = weeks[wk] || { u: 0, i: 0, a: 0, b: 0 };
+    w.u++; if (A.has(ti)) w.a++; if (B.has(ti)) w.b++; if (A.has(ti) && B.has(ti)) w.i++; }
+  const wkKeys = Object.keys(weeks).sort();
+  const series = wkKeys.map(k => ({ wk: k, a: weeks[k].a, b: weeks[k].b, i: weeks[k].i, u: weeks[k].u }));
+  const spark = wkKeys.map(k => weeks[k].u ? weeks[k].i / weeks[k].u : 0);
+  // direction: mean co-rate first half vs second half of the active span
+  const half = Math.max(1, Math.floor(wkKeys.length / 2));
+  const mean = arr => arr.length ? arr.reduce((x, y) => x + y, 0) / arr.length : 0;
+  const f = mean(spark.slice(0, half)), l = mean(spark.slice(-half));
+  const dir = l > f + 0.08 ? 'converging' : f > l + 0.08 ? 'diverging' : 'steady';
+  return { shared, union, jac: union ? shared / union : 0, spark, wkKeys, series, first: f, last: l, dir,
+           aN: A.size, bN: B.size };
+}
+
+const cardHits = ci => hits.filter(h => h.ci === ci);
+
+// idle deck
+const idle = new THREE.Group();
+scene.add(idle);
+(function buildIdle() {
+  const mat = new THREE.LineBasicMaterial({ color: 0x23262e, transparent: true, opacity: 0.8 });
+  for (let i = 0; i < T.length; i++) {
+    const z = -(i - T.length / 2) * 3.2;
+    idle.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-CW / 2, 0, z), new THREE.Vector3(CW / 2, 0, z),
+      new THREE.Vector3(CW / 2, CH * 0.55, z), new THREE.Vector3(-CW / 2, CH * 0.55, z),
+      new THREE.Vector3(-CW / 2, 0, z)]), mat));
+  }
+})();
+idle.visible = false;
+
+function makeHalo() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 30);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.25)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+const HALO = makeHalo();
+
+function makeRing() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.strokeStyle = 'rgba(255,255,255,0.95)'; g.lineWidth = 4;
+  g.beginPath(); g.arc(32, 32, 24, 0, Math.PI * 2); g.stroke();
+  return new THREE.CanvasTexture(c);
+}
+const ringSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: makeRing(),
+  transparent: true, depthWrite: false }));
+ringSprite.scale.set(4.2, 4.2, 1);
+ringSprite.visible = false;
+scene.add(ringSprite);
+
+function clearDeck() {
+  deck.traverse(o => { o.geometry?.dispose(); o.material?.dispose?.(); });
+  deck.clear();
+  glowMeshes = []; nodeMeshes = []; rootMeshes = []; pulseMats = []; cards = []; connGeo = null; threads = [];
+  deck.position.z = 0; deckTargetZ = 0; focusIdx = 0; hits = []; treeTis = [];
+  ringSprite.visible = false;
+}
+
+function prunedCard(ti, hitPaths) {
+  const keep = new Set();
+  for (const hp of hitPaths)
+    for (let d = 1; d <= hp.length; d++) keep.add(hp.slice(0, d).join('/'));
+  const hitSet = new Set(hitPaths.map(h => h.join('/')));
+  function take(b, path, depth) {
+    const pk = path.join('/');
+    let kids = [];
+    (b.c || []).forEach((c, i) => {
+      const cpk = path.concat(i).join('/');
+      if (keep.has(cpk)) kids.push(take(c, path.concat(i), depth + 1));
+    });
+    return { b, path, pk, isHit: hitSet.has(pk), kids, depth };
+  }
+  return T[ti].beats.map((b, i) => take(b, [i], 1));
+}
+
+function layout(top) {
+  const posmap = {};
+  let cursor = 0, maxDepth = 1;
+  (function scan(ns) { for (const n of ns) { maxDepth = Math.max(maxDepth, n.depth); scan(n.kids); } })(top);
+  const dy = (CH - 6) / (maxDepth + 0.4);
+  function place(n) {
+    let x;
+    if (!n.kids.length) { x = cursor; cursor += 1; }
+    else { const xs = n.kids.map(place); x = xs.reduce((a, b) => a + b, 0) / xs.length; }
+    posmap[n.pk] = { x, y: 4 + n.depth * dy };
+    return x;
+  }
+  top.forEach(place);
+  const width = Math.max(1, cursor - 1);
+  for (const k in posmap) {
+    posmap[k].x = width === 0 ? 0 : (posmap[k].x / width - 0.5) * (CW - 8);
+    if (cursor <= 1) posmap[k].x = 0;
+  }
+  return posmap;
+}
+
+// ---------------- triplet-graph card ----------------
+// Does a mined-graph node refer to the active subject `cid`? (client-side alias
+// match: exact, or shared distinctive token by containment either direction.)
+function nodeIsSubject(nodeId, cid) {
+  const spec = ALIAS[cid];
+  if (spec) {
+    if ((spec.exclude || []).some(x => nodeId.includes(x))) return false;
+    return spec.stems.some(s => nodeId.includes(s));
+  }
+  if (nodeId === cid) return true;
+  const toks = s => s.split(/[^a-z0-9]+/).filter(t => t.length > 3);
+  return toks(cid).some(t => nodeId.includes(t));
+}
+
+// Build + force-lay-out the triplet graph for one transcript, positioned to fill
+// the card rect (x centered on 0, y in [3 .. CH-3]). Deterministic (seeded by
+// node id) so cards are stable across rebuilds.
+const _graphCache = new Map();
+// The 1-hop ego graph around the subject: the subject node(s), every node
+// directly related to them, and the induced edges among that set.
+function cardGraph(ti, cids) {
+  const key = ti + '|' + cids.join(',');
+  if (_graphCache.has(key)) return _graphCache.get(key);
+  const rows = TRIP[T[ti].id] || [];
+  // full adjacency first
+  const idx = new Map(), all = [], fe = [];
+  const get = id => { if (!idx.has(id)) { idx.set(id, all.length); all.push({ id, deg: 0, trips: [] }); } return idx.get(id); };
+  for (const row of rows) {
+    const i = get(row[0]), j = get(row[2]);
+    all[i].trips.push(row); if (j !== i) all[j].trips.push(row);
+    if (i !== j) { fe.push([i, j]); all[i].deg++; all[j].deg++; }
+  }
+  // keep = subject node(s) + their direct neighbors
+  const isSub = id => cids.some(cid => nodeIsSubject(id, cid));
+  const keep = new Set();
+  all.forEach((n, i) => { if (isSub(n.id)) keep.add(i); });
+  for (const [i, j] of fe) { if (keep.has(i)) keep.add(j); if (keep.has(j)) keep.add(i); }
+  // rebuild induced subgraph
+  const remap = new Map(), nodes = [], edges = [];
+  const kadd = i => { if (!remap.has(i)) { remap.set(i, nodes.length); nodes.push({ id: all[i].id, deg: 0, trips: all[i].trips, x: 0, y: 0, vx: 0, vy: 0 }); } return remap.get(i); };
+  [...keep].forEach(kadd);
+  for (const [i, j] of fe) { if (keep.has(i) && keep.has(j)) { const a = remap.get(i), b = remap.get(j); edges.push([a, b]); nodes[a].deg++; nodes[b].deg++; } }
+  const N = nodes.length;
+  const ITER = N > 110 ? 55 : 90;   // ease off iterations on dense cards
+  nodes.forEach(n => { let h = 2166136261; for (const ch of n.id) h = (h ^ ch.charCodeAt(0)) * 16777619 >>> 0; const a = (h % 1000) / 1000 * 6.283, rad = 0.25 + ((h >>> 10) % 1000) / 1000 * 0.75; n.x = Math.cos(a) * rad; n.y = Math.sin(a) * rad; });
+  for (let it = 0; it < ITER; it++) {
+    for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+      let dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y, d2 = dx * dx + dy * dy + 0.01, f = 0.018 / d2;
+      nodes[i].vx += dx * f; nodes[i].vy += dy * f; nodes[j].vx -= dx * f; nodes[j].vy -= dy * f;
+    }
+    for (const [i, j] of edges) { let dx = nodes[j].x - nodes[i].x, dy = nodes[j].y - nodes[i].y, d = Math.sqrt(dx * dx + dy * dy) + 1e-4, f = (d - 0.4) * 0.09 / d; nodes[i].vx += dx * f; nodes[i].vy += dy * f; nodes[j].vx -= dx * f; nodes[j].vy -= dy * f; }
+    for (const n of nodes) { n.vx -= n.x * 0.003; n.vy -= n.y * 0.003; n.x += n.vx * 0.85; n.y += n.vy * 0.85; n.vx *= 0.84; n.vy *= 0.84; }
+  }
+  let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
+  for (const n of nodes) { mnx = Math.min(mnx, n.x); mxx = Math.max(mxx, n.x); mny = Math.min(mny, n.y); mxy = Math.max(mxy, n.y); }
+  const s = Math.min((CW - 7) / Math.max(0.5, mxx - mnx), (CH - 7) / Math.max(0.5, mxy - mny));
+  const cx = (mnx + mxx) / 2, cy = (mny + mxy) / 2;
+  for (const n of nodes) { n.px = (n.x - cx) * s; n.py = CH / 2 + (n.y - cy) * s; }
+  const g = { nodes, edges };
+  _graphCache.set(key, g);
+  return g;
+}
+
+// ---------------- selection ----------------
+// Single-subject selection: the search bar picks one active subject at a time.
+function select(cid) { setPicks([cid]); setDropdown(false); }
+function setPicks(next) {
+  picks = next;
+  selected = picks[0] || null;
+  pairMode = picks.length === 2;
+  clearDeck();
+  document.getElementById('reader').classList.remove('open');
+  renderActive(); updateCollapse();
+  idle.visible = false;
+  if (!picks.length) {
+    mode = 'idle'; layers = [];
+    document.getElementById('tagline').textContent = '';
+    idle.visible = true;
+    setViewTarget(new THREE.Vector3(0, 8, 0));
+    targetViewSize = 46;
+    return;
+  }
+  layers = picks.map(cid => ({ cid, colorHex: subjHex(cid), css: subjCss(cid) }));
+  buildDeck();
+  if (pairMode && !relFor()) inferRelationship();   // kick off on-the-fly generation
+  enterRhizome();
+}
+
+// Build the (single or merged) deck from `layers`. Each card is a conversation
+// tree; hit nodes are colored by which subject grounds them, co-occurrence nodes
+// (grounded by BOTH) get a white core + both halos. One connector thread per layer.
+function buildDeck() {
+  const nodeGeo = new THREE.SphereGeometry(0.42, 10, 8);
+  const hitGeo = new THREE.SphereGeometry(0.8, 12, 10);
+  const coGeo = new THREE.SphereGeometry(1.05, 14, 12);
+
+  // transcripts where each subject appears as a triple node (triple-driven deck)
+  const tidToTi = {}; T.forEach((t, i) => { tidToTi[t.id] = i; });
+  const byTxLayer = layers.map(L => {
+    const s = new Set();
+    for (const tid in TRIP) {
+      if (tidToTi[tid] == null) continue;
+      if (TRIP[tid].some(row => nodeIsSubject(row[0], L.cid) || nodeIsSubject(row[2], L.cid)))
+        s.add(tidToTi[tid]);
+    }
+    return s;
+  });
+  const allTx = new Set();
+  for (const s of byTxLayer) for (const ti of s) allTx.add(ti);
+  treeTis = [...allTx].sort((a, b) => ((T[a].date || '') < (T[b].date || '') ? -1 : 1));  // chronological
+  txIdToCi = {};
+  treeTis.forEach((ti, ci) => { txIdToCi[T[ti].id] = ci; });
+  const nCards = treeTis.length;
+  const layerHits = layers.map(() => []);   // ordered hits per layer → threads
+
+  treeTis.forEach((ti, ci) => {
+    const z = -(ci - (nCards - 1) / 2) * DZ;
+    const grp = new THREE.Group();
+    grp.position.z = z;
+    const fades = [];
+    const reg = (mat, base) => { mat.transparent = true; fades.push({ mat, base }); return mat; };
+
+    const backMat = reg(new THREE.MeshBasicMaterial({ color: 0x11141b, side: THREE.DoubleSide,
+      depthWrite: false }), 0.42);
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(CW, CH), backMat);
+    back.position.y = CH / 2;
+    grp.add(back);
+    const frameMat = reg(new THREE.LineBasicMaterial({ color: 0x2b2f3a }), 0.9);
+    grp.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-CW / 2, 0, 0), new THREE.Vector3(CW / 2, 0, 0),
+      new THREE.Vector3(CW / 2, CH, 0), new THREE.Vector3(-CW / 2, CH, 0),
+      new THREE.Vector3(-CW / 2, 0, 0)]), frameMat));
+    const edgeMat = reg(new THREE.LineBasicMaterial({ color: 0x7e8698 }), 1);
+    const nodeMat = reg(new THREE.MeshBasicMaterial({ color: 0x8b90a0 }), 1);
+
+    // ---- triplet graph for this conversation ----
+    const g = cardGraph(ti, layers.map(L => L.cid));
+    // edges (faint line per triple)
+    const epts = [];
+    for (const [i, j] of g.edges) {
+      const a = g.nodes[i], b = g.nodes[j];
+      epts.push(new THREE.Vector3(a.px, a.py, 0), new THREE.Vector3(b.px, b.py, 0));
+    }
+    grp.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(epts), edgeMat));
+    // nodes: neutral spheres sized by degree; nodes that ARE an active subject
+    // become hits (colored + haloed) so threads/hover keep working
+    g.nodes.forEach((n, ni) => {
+      const own = [];
+      layers.forEach((L, li) => { if (nodeIsSubject(n.id, L.cid)) own.push(li); });
+      const isCo = own.length > 1;
+      const pv = new THREE.Vector3(n.px, n.py, 0);
+      let m;
+      if (own.length) {
+        const col = isCo ? 0xffffff : layers[own[0]].colorHex;
+        const hitMat = reg(new THREE.MeshBasicMaterial({ color: col }), 1);
+        m = new THREE.Mesh(isCo ? coGeo : hitGeo, hitMat);
+      } else {
+        m = new THREE.Mesh(nodeGeo, nodeMat);
+        m.scale.setScalar(0.7 + Math.min(2.6, n.deg * 0.35));   // size by degree
+      }
+      m.position.copy(pv);
+      grp.add(m);
+      m.userData.nodeInfo = { id: n.id, trips: n.trips, ci };   // for hover reveal
+      nodeMeshes.push(m);
+      if (own.length) {
+        const world = pv.clone(); world.z = z;
+        m.userData.hitIndex = hits.length;
+        glowMeshes.push(m);
+        const rec = { ti, ci, path: [ni], beat: { l: n.id, label: n.id, summary: '', text: n.id, sm: '' },
+          world, mesh: m, local: pv.clone(), owners: own, co: isCo, node: n.id };
+        hits.push(rec);
+        for (const li of own) layerHits[li].push(rec);
+        for (const li of own) {
+          const spMat = reg(new THREE.SpriteMaterial({ map: HALO, color: layers[li].colorHex,
+            blending: THREE.AdditiveBlending, depthWrite: false }), isCo ? 0.62 : 0.5);
+          const sp = new THREE.Sprite(spMat);
+          const s = isCo ? 7.5 : 5.5; sp.scale.set(s, s, 1); sp.position.copy(pv);
+          grp.add(sp);
+        }
+      }
+    });
+    cards.push({ grp, ci, targetY: 0, riseCur: 0, baseZ: z, fades, frameMat, backMat });
+    deck.add(grp);
+  });
+
+  // connector thread per layer (each in its subject's color). Between two hits
+  // that skip over cards for conversations this subject wasn't in, the thread
+  // bows OUT to the side of the deck (a quadratic arc) so it routes around those
+  // cards instead of spearing through them. The two subjects bow to opposite
+  // sides. Adjacent/same-card hits (no gap) stay straight.
+  layers.forEach((L, li) => {
+    const mat = new THREE.LineBasicMaterial({ color: L.colorHex, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false });
+    pulseMats.push(mat);
+    const ordered = layerHits[li];
+    const over = li === 0;                    // subject A arcs OVER the deck, subject B arcs UNDER
+    const spans = [];                         // per gap: sample count (1 = straight)
+    let count = ordered.length ? 1 : 0;
+    for (let i = 0; i + 1 < ordered.length; i++) {
+      const gap = Math.abs(ordered[i + 1].ci - ordered[i].ci);
+      const n = gap >= 2 ? 18 : 1;
+      spans.push({ gap, n });
+      count += n;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(Math.max(count, 1) * 3), 3));
+    geo.setDrawRange(0, Math.max(count, 1));
+    threads.push({ geo, ordered, spans, over, count });
+    deck.add(new THREE.Line(geo, mat));     // Line = connected polyline through the arc samples
+  });
+}
+
+// ---------------- modes ----------------
+function applyFades() {
+  for (const c of cards) {
+    const d = c.ci - focusIdx;
+    let fade, rise = 0;
+    if (mode === 'rhizome') { fade = 0.6; }
+    else if (mode === 'node') {
+      // entered: only the focused card, everything else fades away
+      fade = d === 0 ? 1 : 0; rise = d === 0 ? 7 : 0;
+    } else {
+      // tree hover: focused card lifts (drawn up), neighbors dim but stay
+      if (d === 0) { fade = 1; rise = 4.5; }
+      else if (d < 0) fade = 0.07;
+      else fade = Math.max(0.3, 0.8 - d * 0.07);
+    }
+    c.fadeT = fade;   // remembered so the open transition can modulate content separately
+    for (const { mat, base } of c.fades) mat.opacity = base * fade;
+    c.frameMat.color.setHex(mode !== 'rhizome' && d === 0 ? 0x9aa1b3 : 0x2b2f3a);
+    c.targetY = rise;
+  }
+}
+
+// styled subject name(s) for the tagline — "A" or "A ✕ B" in pair mode
+function headLabel() {
+  return picks.map(cid =>
+    `<b style="color:${subjCss(cid)}">${esc(DATA.subjects[cid].display)}</b>`)
+    .join('<span style="color:var(--ink-3)"> ✕ </span>');
+}
+
+// view target for the rhizome deck at a given zoom (keeps it left of the reader
+// panel). Reused when hover-zooming into a beat's grounded cards.
+let rhizomeView = 46;
+function rhizomeTargetFor(vs, zCenter) {
+  const panelW = 414;  // reader: 400px + 14px right margin
+  const shiftWorld = (panelW / 2) * (2 * vs / innerHeight);
+  return new THREE.Vector3(0, CH / 2, 0).addScaledVector(SCREEN_RIGHT, shiftWorld);
+}
+
+function enterRhizome() {
+  // returning from the deck resumes the arc at the focused card; fresh selection starts at 0
+  const fromDeck = (mode === 'tree' || mode === 'node');
+  const resume = fromDeck ? focusIdx : 0;
+  closeP = fromDeck ? 0 : OPEN_END;   // play the reverse choreography when coming from the deck
+  if (fromDeck && cards[focusIdx]) {  // capture the focused card's start state so the
+    const F = cards[focusIdx];        // turn is driven deterministically (no easing tail)
+    F.q0 = F.grp.quaternion.clone(); F.s0 = F.grp.scale.x; F.y0 = CH / 2 + F.riseCur;
+  }
+  mode = 'rhizome';
+  ringSprite.visible = false;
+  arcT = resume; arcTarget = resume; arcHold = ARC_DWELL; arcPlaying = true; arcSnap = null;
+  rhizomeView = 34;
+  if (!fromDeck) {   // fresh selection jumps straight to the arc home; from the deck the
+    deckTargetZ = 0; // camera stays FIXED through the close choreography (moved at its end)
+    targetViewSize = rhizomeView;
+    setViewTarget(new THREE.Vector3(0, CH / 2 + 6, 0).addScaledVector(SCREEN_RIGHT, 12));
+  }
+  const nCards = cards.length;
+  document.getElementById('tagline').innerHTML = headLabel() + ' · ' +
+    `long arc · ${nCards} conversations playing in time · → expand · hover the story to seek`;
+  if (pairMode) showRelPanel(); else showRhizomePanel();
+}
+
+function enterTree(f, snap) {
+  if (mode === 'rhizome' || mode === 'node') { openP = 0; openFrom = mode; }   // play the 2-step open
+  mode = 'tree';
+  ringSprite.visible = false;
+  focusIdx = Math.max(0, Math.min(cards.length - 1, f));
+  deckTargetZ = (focusIdx - (cards.length - 1) / 2) * DZ;
+  if (snap) deck.position.z = deckTargetZ;
+  applyFades();
+  setViewTarget(new THREE.Vector3(0, CH / 2, 0).addScaledVector(SCREEN_RIGHT, 34));
+  targetViewSize = 40;
+  const t = T[treeTis[focusIdx]];
+  const k = cardHits(focusIdx).length;
+  document.getElementById('tagline').innerHTML = headLabel() + ' · ' +
+    `card ${focusIdx + 1}/${cards.length} — ${t.date} · ${k} segment${k === 1 ? '' : 's'} · ` +
+    `←/→ step · ⏎ draw the tree · esc arc view`;
+  showTreePanel();
+}
+
+function enterNode(k) {
+  const chs = cardHits(focusIdx);
+  mode = 'node';
+  _lastGround = '';
+  // k = -1 -> whole-transcript (root) view; 0..n-1 -> focus a beat
+  nodeIdx = chs.length ? Math.max(-1, Math.min(chs.length - 1, k)) : -1;
+  applyFades();
+  setViewTarget(new THREE.Vector3(0, CH / 2 + 6, 0).addScaledVector(SCREEN_RIGHT, 12));
+  targetViewSize = 30;
+  const t = T[treeTis[focusIdx]];
+  const pos = nodeIdx < 0 ? 'full transcript' : `node ${nodeIdx + 1}/${chs.length}`;
+  document.getElementById('tagline').innerHTML = headLabel() + ' · ' +
+    `card ${focusIdx + 1}/${cards.length} — ${t.date} · ${pos} · ` +
+    `←/→ page · scroll the transcript freely · esc back to deck`;
+  renderReader(focusIdx, nodeIdx < 0 ? null : chs[nodeIdx]);
+}
+
+const arcCur = () => Math.max(0, Math.min(cards.length - 1, Math.round(arcT)));
+addEventListener('keydown', e => {
+  if (!selected || !cards.length) return;
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (mode === 'rhizome') enterTree(arcCur());   // open the deck at the current card
+    else if (mode === 'tree') enterTree(focusIdx + 1);
+    else if (mode === 'node') enterNode(nodeIdx + 1);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (mode === 'rhizome') enterTree(arcCur());
+    else if (mode === 'tree') enterTree(focusIdx - 1);
+    else if (mode === 'node') enterNode(nodeIdx - 1);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (mode === 'tree') enterNode(-1);   // entered card shows the FULL transcript
+    else if (mode === 'node') enterTree(focusIdx);
+    else if (mode === 'rhizome') enterTree(arcCur());
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    if (mode === 'node') enterTree(focusIdx);
+    else if (mode === 'tree') enterRhizome();
+  }
+});
+
+// ---------------- panels ----------------
+function openPanel() {
+  const r = document.getElementById('reader');
+  r.classList.add('open');
+  if (selected) r.style.setProperty('--subj', subjCss(selected));
+}
+
+function refreshPanel() {
+  if (mode === 'rhizome') { if (pairMode) showRelPanel(); else showRhizomePanel(); }
+  else if (mode === 'tree') showTreePanel();
+}
+
+function narrFor(cid) { return NARR && NARR[cid]; }
+
+function highlightBeat(beat) {
+  // beat = arc_beats entry or null to restore
+  if (mode !== 'rhizome') return;
+  if (!beat) {                       // restore the full-deck framing
+    applyFades();
+    deckTargetZ = 0;
+    targetViewSize = rhizomeView;
+    setViewTarget(rhizomeTargetFor(rhizomeView));
+    return;
+  }
+  const color = pairMode ? 0xffffff : subjHex(selected);
+  const cis = (beat.tx || []).map(id => txIdToCi[id]).filter(ci => ci != null);
+  const grounded = new Set(cis);
+  for (const c of cards) {
+    const on = grounded.has(c.ci);
+    for (const { mat, base } of c.fades) mat.opacity = base * (on ? 1 : 0.08);
+    c.frameMat.color.setHex(on ? color : 0x2b2f3a);
+    c.targetY = on ? 4 : 0;
+  }
+  // zoom the deck in on the grounded cards so they read as the subject
+  if (cis.length) {
+    const lo = Math.min(...cis), hi = Math.max(...cis), cc = (lo + hi) / 2;
+    deckTargetZ = (cc - (cards.length - 1) / 2) * DZ;         // slide grounded span to center
+    targetViewSize = Math.max(30, Math.min(rhizomeView, (hi - lo) * DZ * 0.6 + 42));
+    setViewTarget(rhizomeTargetFor(targetViewSize));
+  }
+}
+
+function showRhizomePanel() {
+  if (!selected) return;
+  openPanel();
+  document.getElementById('r-summary').style.display = 'none';
+  const S = DATA.subjects[selected];
+  document.getElementById('r-title').textContent = S.display + ' — the long arc';
+  document.getElementById('r-meta').textContent =
+    `${S.type} · ${cards.length} conversations · ${hits.length} segments · mar → jul 2026`;
+  document.getElementById('r-pos').textContent = 'arc';
+  document.getElementById('r-segs').innerHTML = '';
+  const seg = document.getElementById('seg');
+  const story = STORIES[selected];
+  if (story) { renderStory(seg, story.md || story, story.src || {}); return; }
+  const n = narrFor(selected);
+  if (n && n.arc_beats) wireArcBeats(seg, n.arc_beats, '');
+  else if (n) seg.innerHTML = `<p>${esc(n.arc)}</p>`;
+  else seg.innerHTML = '<p style="color:var(--ink-3)">(arc narrative still generating…)</p>';
+  seg.scrollTop = 0;
+}
+
+// In the long-arc view, seek the time playhead to the card(s) a story sentence
+// grounds into (snap to the earliest); releasing resumes play.
+function highlightCards(ciSet) {
+  if (mode !== 'rhizome') return;
+  if (!ciSet || !ciSet.size) { arcSnap = null; arcPlaying = true; arcTarget = Math.round(arcT); arcHold = ARC_DWELL; return; }
+  arcPlaying = false;
+  arcSnap = Math.min(...ciSet);
+}
+
+
+// Fuzzy grounding: which cards support a story sentence? Match on explicit dates
+// (strong) and on the sentence's distinctive words appearing in a card's node ids.
+const _MONTHS = { january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 };
+const _STOP = new Set(['about', 'after', 'again', 'their', 'there', 'these', 'those', 'which', 'would', 'could', 'been', 'have', 'that', 'this', 'with', 'from', 'they', 'them', 'then', 'when', 'what', 'into', 'over', 'your', 'were', 'while', 'where', 'first', 'still', 'more']);
+function groundStoryLine(text) {
+  const lc = text.toLowerCase(), set = new Set();
+  const want = new Set(); let m;
+  const re = /(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})/g;
+  while ((m = re.exec(lc))) want.add(`2026-${String(_MONTHS[m[1]]).padStart(2, '0')}-${String(+m[2]).padStart(2, '0')}`);
+  treeTis.forEach((ti, ci) => { if (want.has(T[ti].date)) set.add(ci); });
+  const words = [...new Set(lc.match(/[a-z][a-z0-9]{4,}/g) || [])].filter(w => !_STOP.has(w));
+  if (words.length) treeTis.forEach((ti, ci) => {
+    let hitN = 0;
+    for (const n of cardGraph(ti, layers.map(L => L.cid)).nodes) {
+      if (nodeIsSubject(n.id, selected)) continue;
+      if (words.some(w => n.id.includes(w))) { if (++hitN >= 2) { set.add(ci); break; } }
+    }
+  });
+  return set;
+}
+
+// Render a triplet-mined Isaacson story. Each sentence carries a [[i]] citation
+// naming the source block(s); `src` maps that index to a transcript id, which
+// resolves to a card (txIdToCi). Hovering a sentence grounds it to those cards.
+function renderStory(seg, md, src) {
+  src = src || {};
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  const tagToCis = tag => {
+    const out = [];
+    for (const num of (tag.match(/\d+/g) || [])) {
+      const tid = src[num], ci = tid != null ? txIdToCi[tid] : null;
+      if (ci != null) out.push(ci);
+    }
+    return [...new Set(out)];
+  };
+  const lines = md.split('\n').map(l => l.trim()).filter(Boolean);
+  let strand = '', body = '';
+  for (const l of lines) {
+    if (l.toUpperCase().startsWith('STRAND:')) { strand = l.slice(7).trim(); continue; }
+    if (l.startsWith('#')) { body += `<h4 style="margin:10px 0 4px">${inline(l.replace(/^#+\s*/, ''))}</h4>`; continue; }
+    // split the paragraph at each [[..]] tag into (text, tag) sentences
+    let buf = '', spans = '';
+    const flush = tag => {
+      const txt = buf.trim(); buf = '';
+      if (!txt) return;
+      spans += `<span class="s-line" data-ci="${tag ? tagToCis(tag).join(',') : ''}">${inline(txt)} </span>`;
+    };
+    for (const tok of l.split(/(\[\[[\d,\s]+\]\])/)) {
+      if (/^\[\[[\d,\s]+\]\]$/.test(tok)) flush(tok); else buf += tok;
+    }
+    flush('');
+    body += '<p>' + spans + '</p>';
+  }
+  const strandHTML = strand
+    ? `<div class="strand">${strand.split(/\s*->\s*/).map(esc).join('<span class="arw"> → </span>')}</div>` : '';
+  seg.innerHTML = strandHTML + body;
+  seg.scrollTop = 0;
+  const spans = seg.querySelectorAll('.s-line');
+  const spanCis = sp => (sp.dataset.ci || '').split(',').filter(Boolean).map(Number);
+  spans.forEach(sp => {
+    sp.onmouseenter = () => {
+      spans.forEach(x => x.classList.remove('hot')); sp.classList.add('hot');
+      highlightCards(new Set(spanCis(sp)));
+    };
+    sp.onclick = () => {   // lock the relevant card, entered (like pressing Enter into it)
+      const cis = spanCis(sp);
+      if (cis.length) { enterTree(cis[0]); enterNode(-1); }
+    };
+  });
+  seg.onmouseleave = () => { spans.forEach(x => x.classList.remove('hot')); highlightCards(null); };
+}
+
+// Renders an interactive arc-beat paragraph into `seg` (hover→ground highlight,
+// click→pin + grounding chips). `prefixHTML` is inserted above the beats.
+function wireArcBeats(seg, beats, prefixHTML) {
+  pinnedBeat = null;
+  seg.innerHTML = (prefixHTML || '') + '<p>' + beats.map((b, i) =>
+    `<span class="arc-beat" data-i="${i}">${esc(b.text)}</span> `).join('') +
+    '</p><div id="beat-ground"></div>' +
+    '<p style="color:var(--ink-3);font-size:11px">hover a beat to see where it is grounded · click to pin</p>';
+  const clearHot = () => seg.querySelectorAll('.arc-beat.hot').forEach(e2 => e2.classList.remove('hot'));
+  seg.onmouseleave = () => { if (pinnedBeat == null) { clearHot(); highlightBeat(null); } };
+  seg.querySelectorAll('.arc-beat').forEach(el => {
+    const b = beats[+el.dataset.i];
+    el.onmouseenter = () => { if (pinnedBeat != null) return; clearHot(); el.classList.add('hot'); highlightBeat(b); };
+    el.onclick = () => {
+      const i = +el.dataset.i;
+      pinnedBeat = pinnedBeat === i ? null : i;
+      seg.querySelectorAll('.arc-beat').forEach(e2 => e2.classList.toggle('pin', +e2.dataset.i === pinnedBeat));
+      highlightBeat(pinnedBeat != null ? b : null);
+      const g = document.getElementById('beat-ground');
+      g.innerHTML = '';
+      if (pinnedBeat != null) {
+        for (const txid of b.tx || []) {
+          const ci = txIdToCi[txid];
+          if (ci == null) continue;
+          const chip = document.createElement('span');
+          chip.className = 'seg-chip';
+          chip.textContent = T[treeTis[ci]].date + ' · ' + T[treeTis[ci]].title.slice(0, 30);
+          chip.onclick = ev => { ev.stopPropagation(); enterTree(ci); };
+          g.appendChild(chip);
+        }
+      }
+    };
+  });
+}
+
+// ---------------- relationship (pair) panel ----------------
+// Two views: 'narrative' (the arc + bond character) and 'copresence' (the
+// measured over-time chart). The user toggles between them with tabs.
+let relView = 'narrative';
+
+// Two stacked mini-charts:
+//  (1) co-presence rate over time — the direct together/apart signal (% of the
+//      week's active conversations in which BOTH appear).
+//  (2) each subject's own activity over time, scaled to its own peak so both are
+//      visible despite very different volumes — shows who is ramping or fading.
+function copresenceChartSVG(tj) {
+  const S = tj.series;
+  if (!S.length) return '';
+  const W = 360, padL = 22, padR = 8, n = S.length;
+  const xAt = i => padL + (n > 1 ? i / (n - 1) * (W - padL - padR) : (W - padL - padR) / 2);
+  const ca = subjCss(picks[0]), cb = subjCss(picks[1]);
+  let lastM = ''; const months = [];
+  S.forEach((s, i) => { const m = s.wk.slice(0, 7); if (m !== lastM) { lastM = m;
+    months.push([i, new Date(s.wk + 'T00:00:00Z').toLocaleString('en', { month: 'short', timeZone: 'UTC' })]); } });
+
+  // chart 1 — co-presence rate 0..1
+  const c1T = 16, c1H = 74, yR = v => c1T + c1H - v * c1H;
+  const path = (get, close) => {
+    const p = S.map((s, i) => (i ? 'L' : 'M') + xAt(i).toFixed(1) + ' ' + get(s, i).toFixed(1)).join(' ');
+    return close ? `M${xAt(0).toFixed(1)} ${yR(0)} ` + p.slice(1) + ` L${xAt(n - 1).toFixed(1)} ${yR(0)} Z` : p;
+  };
+  const rLine = path((s, i) => yR(tj.spark[i]), false);
+  const rArea = path((s, i) => yR(tj.spark[i]), true);
+
+  // chart 2 — each subject scaled to its own peak
+  const c2T = c1T + c1H + 24, c2H = 46, base2 = c2T + c2H;
+  const aMax = Math.max(1, ...S.map(s => s.a)), bMax = Math.max(1, ...S.map(s => s.b));
+  const yA = v => base2 - (v / aMax) * c2H, yB = v => base2 - (v / bMax) * c2H;
+  const aLine = S.map((s, i) => (i ? 'L' : 'M') + xAt(i).toFixed(1) + ' ' + yA(s.a).toFixed(1)).join(' ');
+  const bLine = S.map((s, i) => (i ? 'L' : 'M') + xAt(i).toFixed(1) + ' ' + yB(s.b).toFixed(1)).join(' ');
+  const H = base2 + 16;
+
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">
+    <text x="0" y="${c1T - 5}" fill="var(--ink-3)" font-size="9">co-presence · % of the week's convos they shared</text>
+    <line x1="${padL}" y1="${yR(1).toFixed(1)}" x2="${W - padR}" y2="${yR(1).toFixed(1)}" stroke="var(--border)" stroke-dasharray="2 3" opacity=".6"/>
+    <line x1="${padL}" y1="${yR(0)}" x2="${W - padR}" y2="${yR(0)}" stroke="var(--border)"/>
+    <text x="0" y="${(yR(1) + 3).toFixed(1)}" fill="var(--ink-3)" font-size="8">100</text>
+    <text x="0" y="${(yR(0) + 3).toFixed(1)}" fill="var(--ink-3)" font-size="8">0</text>
+    <path d="${rArea}" fill="rgba(255,255,255,.10)"/>
+    <path d="${rLine}" fill="none" stroke="#cfd4de" stroke-width="1.7" stroke-linejoin="round"/>
+    <text x="0" y="${c2T - 6}" fill="var(--ink-3)" font-size="9">weekly activity · each scaled to its own peak</text>
+    <line x1="${padL}" y1="${base2.toFixed(1)}" x2="${W - padR}" y2="${base2.toFixed(1)}" stroke="var(--border)"/>
+    <path d="${aLine}" fill="none" stroke="${ca}" stroke-width="1.6" stroke-linejoin="round"/>
+    <path d="${bLine}" fill="none" stroke="${cb}" stroke-width="1.6" stroke-linejoin="round"/>
+    ${months.map(([i, m]) => `<text x="${xAt(i).toFixed(1)}" y="${H - 3}" fill="var(--ink-3)" font-size="8" text-anchor="middle">${m}</text>`).join('')}
+  </svg>`;
+}
+
+function copresenceHTML(tj) {
+  const [a, b] = picks;
+  const trend = { converging: 'rising', diverging: 'declining', steady: 'steady' }[tj.dir];
+  const arrow = { converging: '↗', diverging: '↘', steady: '→' }[tj.dir] || '·';
+  const ca = subjCss(a), cb = subjCss(b), pct = x => Math.round(x * 100);
+  return `<div class="rel-traj"><span class="rel-arrow">${arrow}</span><b>${trend} co-presence</b>
+      <span class="rel-sub">${pct(tj.first)}% → ${pct(tj.last)}% of shared-window convos</span></div>
+    <div class="cp-chart">${copresenceChartSVG(tj)}</div>
+    <div class="rel-stats">
+      <span><i style="background:${ca}"></i>${esc(DATA.subjects[a].display)} · ${tj.aN} convos</span>
+      <span><i style="background:${cb}"></i>${esc(DATA.subjects[b].display)} · ${tj.bN} convos</span>
+      <span><i style="background:#fff"></i>shared ${tj.shared} · Jaccard ${tj.jac.toFixed(2)}</span>
+    </div>
+    <p style="color:var(--ink-3);font-size:11px;margin-top:8px">Top: how much of each week's conversation they actually shared — the direct together/apart signal. Bottom: each subject's own activity (scaled to its peak) so you can see who is ramping up or fading.</p>`;
+}
+
+function narrativePrefix(rel) {
+  const character = rel && rel.trajectory && rel.trajectory.label;
+  return `<div class="rel-charline">` +
+    (character ? `<span class="rel-char" title="the character of their bond">${esc(character)}</span>`
+               : `<span class="rel-char pending">reading their bond…</span>`) + `</div>` +
+    (rel && rel.trajectory ? `<p class="rel-summary">${esc(rel.trajectory.summary)}</p>` : '');
+}
+
+function showRelPanel() {
+  if (!pairMode) return;
+  openPanel();
+  document.getElementById('reader').style.setProperty('--subj', '#cfd4de');
+  document.getElementById('r-summary').style.display = 'none';
+  const [a, b] = picks;
+  const rel = relFor(), tj = coTrajectory(a, b);
+  document.getElementById('r-title').innerHTML =
+    `<span style="color:${subjCss(a)}">${esc(DATA.subjects[a].display)}</span>` +
+    ` <span style="color:var(--ink-3)">✕</span> ` +
+    `<span style="color:${subjCss(b)}">${esc(DATA.subjects[b].display)}</span>`;
+  document.getElementById('r-meta').textContent = `their relationship · ${cards.length} conversations · mar → jul 2026`;
+  document.getElementById('r-pos').textContent = relView;
+  // tabs
+  const segsEl = document.getElementById('r-segs');
+  segsEl.innerHTML = `<div class="rel-tabs">
+    <button data-v="narrative" class="${relView === 'narrative' ? 'on' : ''}">narrative</button>
+    <button data-v="copresence" class="${relView === 'copresence' ? 'on' : ''}">co-presence</button></div>`;
+  segsEl.querySelectorAll('.rel-tabs button').forEach(btn => btn.onclick = () => {
+    if (relView === btn.dataset.v) return;
+    relView = btn.dataset.v;
+    if (relView !== 'narrative') { pinnedBeat = null; applyFades(); }  // drop any arc-beat grounding
+    showRelPanel();
+  });
+  const seg = document.getElementById('seg');
+  if (relView === 'copresence') {
+    seg.onmouseleave = null;
+    seg.innerHTML = copresenceHTML(tj);
+  } else if (rel && rel.arc_beats) {
+    wireArcBeats(seg, rel.arc_beats, narrativePrefix(rel));
+  } else {
+    seg.onmouseleave = null;
+    seg.innerHTML = narrativePrefix(rel) +
+      `<p style="color:var(--ink-3)"><span class="spin"></span> inferring how they relate — mining their shared conversations…</p>`;
+  }
+  seg.scrollTop = 0;
+}
+
+let relJob = null;
+async function inferRelationship() {
+  const [a, b] = picks;
+  const key = relKey(a, b);
+  relJob = key;
+  try {
+    const { job, error } = await (await fetch('api/relationship', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ a, b }) })).json();
+    if (!job) throw new Error(error || 'no job');
+    let j;
+    do {
+      await new Promise(r => setTimeout(r, 1800));
+      if (relJob !== key) return;                 // selection changed; abandon
+      j = await (await fetch('api/job/' + job)).json();
+    } while (j.status === 'running');
+    if (j.status !== 'done') return;
+    await loadRel();
+    if (relJob === key && pairMode && relKey(picks[0], picks[1]) === key && mode === 'rhizome') showRelPanel();
+  } catch (e) { /* leave the placeholder; user can re-pick */ }
+}
+
+function showTreePanel() {
+  if (!selected || mode !== 'tree') return;
+  openPanel();
+  document.getElementById('r-summary').style.display = 'none';
+  const t = T[treeTis[focusIdx]];
+  const chs = cardHits(focusIdx);
+  document.getElementById('r-title').textContent = t.title;
+  document.getElementById('r-meta').textContent =
+    `${t.date} · ${t.mtype.replace(/_/g, ' ')} · ${t.words.toLocaleString()} words`;
+  document.getElementById('r-pos').textContent = `card ${focusIdx + 1}/${cards.length}`;
+  const segsEl = document.getElementById('r-segs');
+  segsEl.innerHTML = '';
+  chs.forEach((h, j) => {
+    const chip = document.createElement('span');
+    chip.className = 'seg-chip';
+    chip.textContent = h.beat.l.slice(0, 34);
+    chip.onclick = () => enterNode(j);
+    segsEl.appendChild(chip);
+  });
+  const rel = relFor();
+  const n = narrFor(selected);
+  const note = (pairMode && rel && rel.per_tx && rel.per_tx[t.id]) || (!pairMode && n && n.per_tx && n.per_tx[t.id]);
+  const co = pairMode ? cardHits(focusIdx).filter(h => h.co).length : 0;
+  // primary body: this conversation's generated extraction summary
+  let body;
+  if (SUMM[t.id]) body = `<p>${esc(SUMM[t.id])}</p>`;
+  else if (note) body = `<p>${esc(note)}</p>`;
+  else body = `<p style="color:var(--ink-2)">${esc(DATA.subjects[selected].display)} appears in ${chs.length} segment${chs.length === 1 ? '' : 's'} of this conversation.</p>`;
+  const seg = document.getElementById('seg');
+  seg.innerHTML =
+    (pairMode ? `<p style="font-size:11px;color:var(--ink-3)">${co ? `${co} shared segment${co === 1 ? '' : 's'} — both grounded here` : 'only one of the pair appears here'}</p>` : '') +
+    body +
+    `<p style="color:var(--ink-3);font-size:11px">⏎ draw this tree from the deck to page its ${chs.length} node${chs.length === 1 ? '' : 's'}</p>`;
+  seg.scrollTop = 0;
+}
+
+// Renders the FULL transcript into the reader; `beat` (or null) is the focus.
+// Subject mentions + aliases are highlighted throughout; when a beat is focused
+// its span is emphasized and the rest dimmed, and the panel scrolls to it.
+// The whole transcript is always freely scrollable.
+const _txMarkCache = {};
+async function renderReader(ci, beat) {
+  const t = T[treeTis[ci]];
+  const S = DATA.subjects[selected];
+  const css = subjCss(selected);
+  openPanel();
+
+  // header info + summary + chips
+  const chs = cardHits(ci);
+  document.getElementById('r-title').textContent = beat ? beat.beat.l : t.title;
+  document.getElementById('r-meta').textContent = beat
+    ? (beat.beat.s != null
+        ? `${t.date} · ${t.title} · lines ${beat.beat.s}–${beat.beat.e} · ${(beat.beat.w || 0).toLocaleString()} words`
+        : `${t.date} · ${t.title}`)
+    : `${t.date} · ${t.mtype.replace(/_/g, ' ')} · full transcript · ${t.words.toLocaleString()} words`;
+  document.getElementById('r-pos').textContent = beat ? `node ${chs.indexOf(beat) + 1}/${chs.length}` : 'root';
+  const sumEl = document.getElementById('r-summary');
+  if (beat && beat.beat.sm) { sumEl.style.display = 'block'; sumEl.innerHTML = esc(beat.beat.sm); }
+  else sumEl.style.display = 'none';
+  const segsEl = document.getElementById('r-segs');
+  segsEl.innerHTML = '';
+  const rootChip = document.createElement('span');
+  rootChip.className = 'seg-chip' + (beat ? '' : ' on');
+  rootChip.textContent = '⌂ full transcript';
+  rootChip.onclick = () => enterNode(-1);
+  segsEl.appendChild(rootChip);
+  chs.forEach((h2, j) => {
+    const chip = document.createElement('span');
+    chip.className = 'seg-chip' + (h2 === beat ? ' on' : '');
+    chip.textContent = h2.beat.l.slice(0, 30);
+    chip.onclick = () => enterNode(j);
+    segsEl.appendChild(chip);
+  });
+
+  // 3D ring on focused beat node (hidden in root view)
+  if (beat) {
+    const w = beat.local.clone(); cards[beat.ci].grp.localToWorld(w);
+    ringSprite.position.copy(w); ringSprite.visible = true; ringSprite.userData = { hit: beat };
+  } else ringSprite.visible = false;
+
+  const seg = document.getElementById('seg');
+  // render full transcript once per (tx, subject-set); cache; then just re-emphasize.
+  // In pair mode BOTH subjects are highlighted, each in its own color.
+  const cacheKey = t.id + '|' + picks.join(',');
+  if (seg.dataset.key !== cacheKey) {
+    seg.innerHTML = '<p style="color:var(--ink-3)">loading…</p>';
+    if (!txCache[t.id]) txCache[t.id] = await (await fetch(`data/${t.id}.json`)).json();
+    await LSP;
+    const d = txCache[t.id];
+    // per-picked-subject: color, speaker labels (persons), mention lines, surface forms
+    const subjInfo = picks.map(cid => {
+      const S2 = DATA.subjects[cid], col = subjCss(cid);
+      const isPerson = S2.type === 'person';
+      const matched = new Set();
+      if (isPerson) {
+        const toks = new Set(S2.display.toLowerCase().split(/[^a-z0-9]+/).filter(t => t.length > 2));
+        for (const sp of new Set((d.speakers || []).filter(Boolean)))
+          if (sp.toLowerCase().split(/[^a-z0-9]+/).some(t => toks.has(t))) matched.add(sp);
+      }
+      const surface = new Set();
+      for (const w2 of S2.display.toLowerCase().split(/[()]/)) { const q = w2.trim(); if (q.length > 2) surface.add(q); }
+      const markLines = {};
+      for (const s2 of d.subjects) {
+        const c = (window.__canon && window.__canon[s2.id]) || s2.id;
+        if (c !== cid) continue;
+        if (s2.display && s2.display.length > 2) surface.add(s2.display.toLowerCase());
+        for (const a of s2.aliases || []) if (a && a.length > 2) surface.add(a.toLowerCase());
+        for (const m of s2.mentions) (markLines[m.line] = markLines[m.line] || []).push(m.quote);
+      }
+      return { cid, col, isPerson, matched, markLines,
+               surfaceArr: [...surface].sort((a, b) => b.length - a.length) };
+    });
+    const html = [];
+    for (let n = 1; n <= d.lines.length; n++) {
+      const line = d.lines[n - 1];
+      if (!line || !line.trim() || isMetaLine(line)) continue;
+      const low = line.toLowerCase();
+      const spans = [];   // [start, end, color]
+      for (const si of subjInfo) {
+        for (const q of si.markLines[n] || []) {
+          const idx = low.indexOf(q.toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 80));
+          if (idx >= 0) spans.push([idx, idx + Math.min(q.length, line.length - idx), si.col]);
+        }
+        for (const term of si.surfaceArr) {
+          let from = 0, idx;
+          while ((idx = low.indexOf(term, from)) >= 0) {
+            const b0 = idx === 0 || !/[a-z0-9]/.test(low[idx - 1]);
+            const a0 = idx + term.length >= low.length || !/[a-z0-9]/.test(low[idx + term.length]);
+            if (b0 && a0) spans.push([idx, idx + term.length, si.col]);
+            from = idx + term.length;
+          }
+        }
+      }
+      spans.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+      const merged = [];   // greedy non-overlapping, first color wins
+      for (const sp of spans) {
+        if (merged.length && sp[0] < merged[merged.length - 1][1]) continue;
+        merged.push([...sp]);
+      }
+      let out = '', pos = 0;
+      for (const [a2, b2, col] of merged) {
+        out += esc(line.slice(pos, a2)) +
+          `<mark style="border-color:${col};background:color-mix(in srgb, ${col} 22%, transparent)">` +
+          esc(line.slice(a2, b2)) + '</mark>';
+        pos = b2;
+      }
+      out += esc(line.slice(pos));
+      const isSpk = SPK_RE.test(line.trim()) && line.trim().split(/\s+/).length <= 6;
+      const spk = (d.speakers || [])[n - 1];
+      const voiceSi = subjInfo.find(si => si.isPerson && si.matched.has(spk));
+      const spokeStyle = voiceSi ? ` style="--subj:${voiceSi.col}"` : '';
+      html.push(`<p class="txl${isSpk ? ' spk' : ''}${voiceSi ? ' spoke' : ''}"${spokeStyle} data-l="${n}">${out}</p>`);
+    }
+    seg.innerHTML = html.join('');
+    seg.dataset.key = cacheKey;
+  }
+
+  // emphasis + scroll
+  seg.classList.toggle('focus', !!beat);
+  seg.querySelectorAll('.txl.inb').forEach(el => el.classList.remove('inb', 'first'));
+  if (beat) {
+    const inb = [...seg.querySelectorAll('.txl')].filter(el => {
+      const n = +el.dataset.l; return n >= beat.beat.s && n <= beat.beat.e;
+    });
+    inb.forEach(el => el.classList.add('inb'));
+    if (inb[0]) inb[0].classList.add('first');
+    // scroll: first highlighted mention within the beat, else beat start
+    const firstMark = inb.find(el => el.querySelector('mark')) || inb[0];
+    if (firstMark) seg.scrollTop = Math.max(0, firstMark.offsetTop - seg.clientHeight * 0.3);
+  } else {
+    seg.scrollTop = 0;
+  }
+}
+
+// In the entered (full-transcript) view: scroll the transcript to the turn(s)
+// grounding the hovered node's triples, and highlight them.
+let _lastGround = '';
+function scrollToGrounding(info) {
+  if (_lastGround === info.id) return;
+  _lastGround = info.id;
+  const seg = document.getElementById('seg');
+  if (!seg || !seg.dataset.key) return;
+  seg.querySelectorAll('.txl.turnhot').forEach(el => el.classList.remove('turnhot'));
+  const lines = [...new Set(info.trips.map(t => t[4]).filter(l => l > 0))].sort((a, b) => a - b);
+  if (!lines.length) return;
+  const all = [...seg.querySelectorAll('.txl')];
+  let first = null;
+  for (const ln of lines) {
+    // grounding line may be a skipped/meta line — take the nearest rendered line at/after it
+    const el = seg.querySelector(`.txl[data-l="${ln}"]`) || all.find(e => +e.dataset.l >= ln);
+    if (el) { el.classList.add('turnhot'); if (!first) first = el; }
+  }
+  if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ---------------- raycast ----------------
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let hoverIdx = null, hoverRoot = null;
+let hoverNode = null;
+renderer.domElement.addEventListener('mousemove', e => {
+  mouse.x = (e.clientX / innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  ray.setFromCamera(mouse, camera);
+  const place = () => {
+    const flip = e.clientX > innerWidth - 380;
+    tip.style.left = flip ? '' : (e.clientX + 14) + 'px';
+    tip.style.right = flip ? (innerWidth - e.clientX + 14) + 'px' : '';
+    tip.style.top = (e.clientY + 14) + 'px';
+  };
+  // zoomed into a card: hover ANY node → reveal its mined triplets
+  hoverNode = null;
+  if (mode === 'tree' || mode === 'node' || mode === 'rhizome') {
+    const cardNodes = nodeMeshes.filter(m => {
+      const ci = m.userData.nodeInfo.ci;
+      return mode === 'rhizome' ? (cards[ci] && cards[ci].vis > 0.5) : ci === focusIdx;
+    });
+    const nh = ray.intersectObjects(cardNodes)[0];
+    if (nh) {
+      hoverNode = nh.object.userData.nodeInfo;
+      hoverIdx = nh.object.userData.hitIndex ?? null;
+      hoverRoot = null;
+      renderer.domElement.style.cursor = 'pointer';
+      const rows = hoverNode.trips.slice(0, 10).map(t =>
+        `<span style="color:#cfd4de">${esc(t[0])}</span> <span style="color:var(--subj,#7e8698)">${esc(t[1])}</span> <span style="color:#cfd4de">${esc(t[2])}</span>`).join('<br>');
+      tip.style.display = 'block';
+      tip.innerHTML = `<b>${esc(hoverNode.id)}</b> <span style="color:#888">· ${hoverNode.trips.length} triple${hoverNode.trips.length === 1 ? '' : 's'}</span><br>${rows}${hoverNode.trips.length > 10 ? '<br>…' : ''}`;
+      place();
+      if (mode === 'node') scrollToGrounding(hoverNode);   // jump transcript to the grounding turn
+      return;
+    }
+  }
+  const glow = mode === 'rhizome'
+    ? glowMeshes.filter(m => { const c = cards[m.userData.nodeInfo.ci]; return c && c.vis > 0.5; })
+    : glowMeshes;
+  const hit = ray.intersectObjects(glow)[0];
+  hoverIdx = hit ? hit.object.userData.hitIndex : null;
+  const rhit = hoverIdx == null ? ray.intersectObjects(rootMeshes)[0] : null;
+  hoverRoot = rhit ? rhit.object.userData.rootCi : null;
+  renderer.domElement.style.cursor = (hit || rhit) ? 'pointer' : '';
+  if (hit) {
+    const h = hits[hoverIdx];
+    tip.style.display = 'block';
+    tip.innerHTML = `<b>${esc(h.node || h.beat.label || '')}</b><br>${T[h.ti].date} · ${esc(T[h.ti].title.slice(0, 60))}`;
+    place();
+  } else if (rhit) {
+    const t = T[treeTis[hoverRoot]];
+    tip.style.display = 'block';
+    tip.innerHTML = `<b>⌂ full transcript</b><br>${t.date} · ${esc(t.title.slice(0, 60))}`;
+    place();
+  } else tip.style.display = 'none';
+});
+renderer.domElement.addEventListener('click', () => {
+  if (mode === 'rhizome') {         // click a node in the arc → expand the deck to that card
+    if (hoverNode) enterTree(hoverNode.ci);
+    return;
+  }
+  if (hoverIdx != null) {
+    const h = hits[hoverIdx];
+    if (h.ci !== focusIdx) enterTree(h.ci);
+    enterNode(cardHits(h.ci).indexOf(h));
+  } else if (hoverRoot != null) {
+    if (hoverRoot !== focusIdx) enterTree(hoverRoot);
+    enterNode(-1);   // whole transcript
+  }
+});
+
+// ---------------- topbar subject picker ----------------
+function updateCollapse() {
+  const q = document.getElementById('q');
+  q.value = selected && DATA.subjects[selected] ? DATA.subjects[selected].display : '';
+}
+function setDropdown(open) {
+  document.getElementById('dd').classList.toggle('open', open);
+  document.getElementById('picker').classList.toggle('open', open);
+  document.getElementById('reader').classList.toggle('dd-hidden', open);  // hide narrative card while picking
+  if (open) document.getElementById('q').focus();
+}
+document.getElementById('dd').onclick = e => e.stopPropagation();
+addEventListener('click', () => setDropdown(false));
+
+// ---------------- sidebar list ----------------
+function activeRow(id) {
+  const s = DATA.subjects[id];
+  const d = document.createElement('div');
+  d.className = 'subj' + (id === selected ? ' on' : '');
+  d.innerHTML =
+    `<span class="lbl"><span class="dot" style="background:${subjCss(id)}"></span>` +
+    `<span class="nm">${esc(s.display)}</span></span>` +
+    `<span class="right"><span class="n">${s.n_tx} trees</span>` +
+    `<span class="rm" title="remove from active">×</span></span>`;
+  d.querySelector('.rm').onclick = ev => { ev.stopPropagation(); deactivateSubject(id); };
+  d.onclick = ev => { ev.stopPropagation(); select(id); };
+  return d;
+}
+async function deactivateSubject(id) {
+  if (picks.includes(id)) setPicks(picks.filter(x => x !== id));   // drop from view if selected
+  const status = document.getElementById('dd-status');
+  status.innerHTML = `<span class="spin"></span>removing “${esc(DATA.subjects[id].display)}”…`;
+  try {
+    await fetch('api/deactivate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subject: id }) });
+  } catch (e) { /* ignore; reload reflects true state */ }
+  await loadRegistry();     // it's now potential — active list re-renders without it
+  status.textContent = '';
+}
+function renderActive() {
+  const el = document.getElementById('active-list');
+  el.innerHTML = '';
+  const qv = document.getElementById('q').value.toLowerCase().trim();
+  const filterQ = selected && DATA.subjects[selected] &&
+    qv === DATA.subjects[selected].display.toLowerCase() ? '' : qv;  // selection echo ≠ a filter
+  let act = Object.keys(REG.subjects).filter(isActive)
+    .filter(id => DATA.subjects[id]);
+  if (filterQ) act = act
+    .map(id => [id, subjScore(filterQ, id, DATA.subjects[id].display)])
+    .filter(([, sc]) => sc > 0)
+    .sort((a, b) => (b[1] - a[1]) ||
+      (DATA.subjects[b[0]].n_tx - DATA.subjects[a[0]].n_tx))
+    .map(([id]) => id);
+  else act.sort((a, b) => DATA.subjects[b].n_tx - DATA.subjects[a].n_tx);
+  if (!act.length) { el.innerHTML = '<div class="hint" style="margin:2px">no matches</div>'; return; }
+  for (const id of act) el.appendChild(activeRow(id));
+}
+// typo-tolerant match: exact substring ranks highest; otherwise per-word edit
+// similarity, so e.g. "etheria" still surfaces "Etherea".
+function editRatio(a, b) {
+  const m = a.length, n = b.length;
+  if (!m || !n) return 0;
+  const dp = Array.from({ length: m + 1 }, (_, i) => i);
+  for (let j = 1; j <= n; j++) {
+    let prev = dp[0]; dp[0] = j;
+    for (let i = 1; i <= m; i++) {
+      const tmp = dp[i];
+      dp[i] = Math.min(dp[i] + 1, dp[i - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return 1 - dp[m] / Math.max(m, n);
+}
+function subjScore(q, id, display) {
+  let best = 0;
+  for (const h of [id.replace(/-/g, ' '), display.toLowerCase()]) {
+    const idx = h.indexOf(q);
+    if (idx >= 0) { best = Math.max(best, 200 - idx); continue; }
+    if (q.length >= 3) {
+      for (const w of h.split(/[^a-z0-9]+/)) {
+        if (w.length < 3) continue;
+        const r = editRatio(q, w);
+        if (r >= 0.7) best = Math.max(best, 60 + r * 60);            // typo-close word
+      }
+    }
+  }
+  return best;
+}
+const qEl=document.getElementById('q');
+qEl.oninput = () => { setDropdown(true); renderActive(); };
+qEl.onfocus = () => { qEl.select(); setDropdown(true); renderActive(); };
+qEl.onclick = e => e.stopPropagation();
+loadRegistry();
+updateCollapse();
+
+// ---------------- loop ----------------
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  const t = clock.getElapsedTime();
+  const pulse = 0.34 + 0.2 * Math.sin(t * 2.4);
+  threadAlpha += ((mode === 'tree' ? 1 : 0) - threadAlpha) * 0.16;   // thread only in the expanded spread
+  for (const m of pulseMats) m.opacity = pulse * threadAlpha;
+  if (viewGoal) {   // camera glide (smooth pan) toward a pending view goal
+    _pv.copy(viewGoal).sub(controls.target);
+    if (_pv.lengthSq() < 0.002) { const g = viewGoal; viewGoal = null; setViewTarget(g); }
+    else { _pv.multiplyScalar(0.07); controls.target.add(_pv); camera.position.add(_pv); }
+  }
+  deck.position.z += (deckTargetZ - deck.position.z) * 0.14;
+  _faceQuat.copy(camera.quaternion);   // card parallel to screen, upright, no mirror
+  if (mode === 'rhizome' && closeP < OPEN_END) {
+    // deck → arc reverse choreography: (1) other cards' nodes fade out,
+    // (2) the shells collapse into the stack, (3) the focused card turns planar.
+    closeP = Math.min(OPEN_END, closeP + 0.028);
+    const fadeOutP = Math.min(1, closeP / 0.35);
+    const colP = Math.min(1, Math.max(0, (closeP - 0.35) / 0.65));
+    const rotP = Math.min(1, Math.max(0, (closeP - 1) / 0.35));
+    // camera stays put; the stack forms ON the focused card's slot so it never moves
+    const F = cards[focusIdx];
+    const fy = CH / 2 + F.riseCur, fz = F.baseZ;
+    for (const c of cards) {
+      const focused = c.ci === focusIdx;
+      if (!focused) c.riseCur *= 0.9;
+      if (focused) {
+        // deterministic turn: exact endpoints, no easing tail at the arc handoff
+        const s = rotP * rotP * (3 - 2 * rotP);   // smoothstep
+        _q.slerpQuaternions(c.q0 || _IDENT, _faceQuat, s);
+        c.grp.quaternion.copy(_q);
+        const s0 = c.s0 ?? 1;
+        c.grp.scale.setScalar(s0 + (1.16 - s0) * s);
+      } else {
+        c.grp.quaternion.slerp(_IDENT, 0.25);
+        c.grp.scale.x += (1 - c.grp.scale.x) * 0.2; c.grp.scale.y = c.grp.scale.z = c.grp.scale.x;
+      }
+      _rc.set(0, CH / 2, 0).applyQuaternion(c.grp.quaternion).multiplyScalar(c.grp.scale.x);
+      // card CENTER: own slot → the focused card's slot; during the turn the focused
+      // card eases up to the arc's resting height so the handoff has no jump
+      const cy0 = CH / 2 + c.riseCur, cz0 = c.baseZ;
+      let cy = cy0 + (fy - cy0) * colP, cz = cz0 + (fz - cz0) * colP;
+      if (focused) {
+        const s = rotP * rotP * (3 - 2 * rotP);
+        const y0 = c.y0 ?? fy;
+        cy = y0 + ((CH / 2 + 6) - y0) * s;
+      }
+      c.grp.position.set(-_rc.x, cy - _rc.y, cz - _rc.z);
+      const shellA = focused ? 1 : Math.max(0, 1 - Math.max(0, (colP - 0.7) / 0.3));   // shells vanish as they land
+      const ft = c.fadeT ?? 1;
+      const shellB = ft + (1 - ft) * fadeOutP;   // phase 1 lights ALL shells (both sides of focus)
+      const contentA = focused ? 1 : ft * (1 - fadeOutP);
+      for (const { mat, base } of c.fades) {
+        const isShell = (mat === c.frameMat || mat === c.backMat);
+        mat.opacity = base * (isShell ? (focused ? 1 : shellB * shellA) : contentA);
+      }
+      if (focused) { c.frameMat.opacity = 1; c.backMat.opacity = 0.42; }   // match the arc exactly
+      c.frameMat.color.setHex(subjHex(selected));
+      c.vis = focused ? 1 : 0;
+      c.grp.visible = focused || shellA > 0.02 || contentA > 0.02;
+    }
+    if (closeP >= OPEN_END) {   // choreography done — NOW glide the camera to the arc home
+      deckTargetZ = 0;
+      targetViewSize = rhizomeView;
+      setViewTargetSmooth(new THREE.Vector3(0, CH / 2 + 6, 0).addScaledVector(SCREEN_RIGHT, 12));
+    }
+  } else if (mode === 'rhizome') {
+    // LONG ARC: all cards stacked planar at the open-space center; a time playhead
+    // (arcT) sweeps chronologically through them, fading each in and out.
+    const n = cards.length;
+    if (arcSnap != null) arcT += (arcSnap - arcT) * 0.3;
+    else if (arcPlaying && n > 1) {
+      // hold on each card (long dwell), then snap abruptly to the next
+      if (arcHold > 0) arcHold--;
+      else { const nx = Math.round(arcTarget) + 1; if (nx >= n) { arcTarget = 0; arcT = 0; } else arcTarget = nx; arcHold = ARC_DWELL; }
+      arcT += (arcTarget - arcT) * 0.16;
+    }
+    const curCard = ((Math.round(arcT) % n) + n) % n;   // the single card holding the frame + background
+    _tgt.set(0, CH / 2 + 6, 0).sub(deck.position);
+    for (const c of cards) {
+      c.grp.quaternion.slerp(_faceQuat, 0.16);
+      c.grp.scale.x += (1.16 - c.grp.scale.x) * 0.16; c.grp.scale.y = c.grp.scale.z = c.grp.scale.x;
+      _rc.set(0, CH / 2, 0).applyQuaternion(c.grp.quaternion).multiplyScalar(c.grp.scale.x);
+      c.grp.position.set(_tgt.x - _rc.x, _tgt.y - _rc.y, _tgt.z - _rc.z + (c.ci - arcT) * 0.02);
+      const dd = Math.abs(c.ci - arcT);
+      let fade = Math.max(0, 1 - dd * 3.0); fade *= fade;   // graph content swaps; frame/back are stable
+      const isCur = c.ci === curCard;
+      for (const { mat, base } of c.fades) mat.opacity = base * fade;
+      c.frameMat.opacity = isCur ? 1 : 0;                   // exactly one lit frame — no flash
+      c.backMat.opacity = isCur ? 0.42 : 0;                 // stable background — no flash
+      c.frameMat.color.setHex(subjHex(selected));
+      c.vis = fade; c.grp.visible = fade > 0.02 || isCur;
+    }
+  } else {
+    // expanded spread. node = focused card turned to face the screen at center.
+    // tree open = 2 phases: (1) the focused card rotates flat, (2) the other cards
+    // extrude out of it into the deck lineup while the focused card rises (un-turned).
+    const entered = (mode === 'node');
+    if (mode === 'tree') openP = Math.min(OPEN_END, openP + 0.028); else openP = OPEN_END;
+    const rotP = Math.min(1, openP / 0.35);                              // phase 1: rotate
+    const extP = Math.min(1, Math.max(0, (openP - 0.35) / 0.65));        // phase 2: extrude
+    const contentP = Math.min(1, Math.max(0, (openP - 1) / 0.35));       // phase 3: other cards' nodes fade in
+    for (const c of cards) {
+      c.grp.visible = true; c.vis = 1;
+      const focused = c.ci === focusIdx;
+      c.riseCur += (c.targetY - c.riseCur) * 0.16;
+      // rotation: node-focused faces screen; tree-focused rotates flat over phase 1; others flat
+      let qt = _IDENT;
+      if (entered && focused) qt = _faceQuat;
+      else if (mode === 'tree' && focused) { _q.slerpQuaternions(_faceQuat, _IDENT, rotP); qt = _q; }
+      c.grp.quaternion.slerp(qt, 0.2);
+      const sT = (entered && focused) ? 1.16 : 1;
+      c.grp.scale.x += (sT - c.grp.scale.x) * 0.16; c.grp.scale.y = c.grp.scale.z = c.grp.scale.x;
+      _rc.set(0, CH / 2, 0).applyQuaternion(c.grp.quaternion).multiplyScalar(c.grp.scale.x);
+      if (entered && focused) {
+        _tgt.set(0, CH / 2 + 6, 0).sub(deck.position);
+        _pv.set(_tgt.x - _rc.x, _tgt.y - _rc.y, _tgt.z - _rc.z);
+      } else {
+        const spX = -_rc.x, spY = (CH / 2 + c.riseCur) - _rc.y, spZ = c.baseZ - _rc.z;   // deck-spread slot
+        // extrude out of the stacked center — for the focused card always, and for the
+        // others only when opening from the arc (from a card, they're already spread)
+        if (mode === 'tree' && extP < 1 && (focused || openFrom === 'rhizome')) {
+          _tgt.set(0, CH / 2 + 6, 0).sub(deck.position);
+          const cx = _tgt.x - _rc.x, cy = _tgt.y - _rc.y, cz = _tgt.z - _rc.z;
+          const e = focused ? Math.min(1, extP * 1.4) : extP;   // focused rises slightly ahead
+          _pv.set(cx + (spX - cx) * e, cy + (spY - cy) * e, cz + (spZ - cz) * e);
+        } else _pv.set(spX, spY, spZ);
+      }
+      c.grp.position.copy(_pv);
+      // phase 3: extruding cards travel as bare frames/backs; their graph content
+      // (nodes/edges/halos) fades in only AFTER the extrude lands
+      if (mode === 'tree' && openP < OPEN_END && openFrom === 'rhizome' && !focused) {
+        for (const { mat, base } of c.fades) {
+          const isShell = (mat === c.frameMat || mat === c.backMat);
+          mat.opacity = base * (c.fadeT ?? 1) * (isShell ? 1 : contentP);
+        }
+      }
+      // borders travel LIT in the subject color and relax to the resting
+      // palette as content lands — mirrors the deck → arc reverse choreography
+      if (mode === 'tree' && openP < OPEN_END && openFrom === 'rhizome') {
+        _colA.setHex(subjHex(selected));
+        _colB.setHex(focused ? 0x9aa1b3 : 0x2b2f3a);
+        c.frameMat.color.copy(_colA.lerp(_colB, contentP));
+        if (!focused) c.frameMat.opacity = 0.9;
+      }
+    }
+  }
+  if (Math.abs(targetViewSize - viewSize) > 0.05) {
+    viewSize += (targetViewSize - viewSize) * 0.12;
+    setFrustum();
+  }
+  if (ringSprite.visible && ringSprite.userData.hit) {
+    const h = ringSprite.userData.hit;
+    const w = h.local.clone();
+    cards[h.ci].grp.localToWorld(w);
+    ringSprite.position.copy(w);
+    const rp = 4.0 + 0.5 * Math.sin(t * 3);
+    ringSprite.scale.set(rp, rp, 1);
+  }
+  for (const th of threads) {
+    const ord = th.ordered;
+    if (ord.length < 2) continue;
+    const arr = th.geo.attributes.position.array;
+    const px = h => h.world.x, py = h => h.world.y + cards[h.ci].grp.position.y, pz = h => h.world.z;
+    let w = 0;
+    arr[w++] = px(ord[0]); arr[w++] = py(ord[0]); arr[w++] = pz(ord[0]);
+    for (let i = 0; i + 1 < ord.length; i++) {
+      const A = ord[i], B = ord[i + 1], sp = th.spans[i];
+      const ax = px(A), ay = py(A), az = pz(A), bx = px(B), by = py(B), bz = pz(B);
+      if (sp.n === 1) { arr[w++] = bx; arr[w++] = by; arr[w++] = bz; continue; }
+      // arc clear of the skipped cards: subject A bows UP over the deck top, subject
+      // B bows DOWN under the deck floor. Apex reach grows with the card gap.
+      const lift = Math.min(16 + sp.gap * 3, 52);
+      const cx = (ax + bx) / 2;
+      const cy = (ay + by) / 2 + (th.over ? lift : -lift);
+      const cz = (az + bz) / 2;
+      for (let s = 1; s <= sp.n; s++) {
+        const t = s / sp.n, it = 1 - t, c0 = it * it, c1 = 2 * it * t, c2 = t * t;
+        arr[w++] = c0 * ax + c1 * cx + c2 * bx;
+        arr[w++] = c0 * ay + c1 * cy + c2 * by;
+        arr[w++] = c0 * az + c1 * cz + c2 * bz;
+      }
+    }
+    th.geo.attributes.position.needsUpdate = true;
+  }
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

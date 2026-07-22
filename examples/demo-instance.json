@@ -1,0 +1,78 @@
+{
+ "_comment": "Example Storydeck instance for the synthetic demo vault. Run: STORYDECK_INSTANCE=examples/demo-instance.json python3 storydeck.py ingest examples/demo-vault",
+ "program": {
+  "name": "\"Moonrise\" maker residency",
+  "short_name": "Moonrise",
+  "span_full": "Mar 2031 - Apr 2031",
+  "span_active": "Mar-Apr 2031",
+  "season": "spring 2031",
+  "context_note": "Moonrise is a six-week coastal maker residency incubating a handful of hardware/data projects. Coordinator: Rae. Meetings are ASR-transcribed; proper nouns may be garbled.",
+  "tracked_person": {
+   "label": "Rae",
+   "match": [
+    "rae"
+   ],
+   "note": "Rae (residency coordinator) is a special tracked dimension."
+  }
+ },
+ "subjects": {
+  "rae": {
+   "stems": [
+    "rae"
+   ]
+  },
+  "ivo": {
+   "stems": [
+    "ivo"
+   ]
+  },
+  "mara": {
+   "stems": [
+    "mara"
+   ]
+  },
+  "priya": {
+   "stems": [
+    "priya"
+   ]
+  },
+  "lanternfish": {
+   "stems": [
+    "lanternfish"
+   ]
+  },
+  "saltbox": {
+   "stems": [
+    "saltbox"
+   ]
+  }
+ },
+ "subject_aliases": {},
+ "exclude_subjects": [],
+ "subject_display": {
+  "rae": {
+   "display": "Rae",
+   "type": "person"
+  },
+  "ivo": {
+   "display": "Ivo",
+   "type": "person"
+  },
+  "mara": {
+   "display": "Mara",
+   "type": "person"
+  },
+  "priya": {
+   "display": "Priya",
+   "type": "person"
+  },
+  "lanternfish": {
+   "display": "Lanternfish",
+   "type": "team"
+  },
+  "saltbox": {
+   "display": "Saltbox",
+   "type": "team"
+  }
+ }
+}

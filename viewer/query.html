@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storydeck | Query</title>
+<style>
+  :root{ --bg:#08090c; --panel:rgba(16,18,24,.92); --ink:#e8e6df; --mut:#9a9890;
+         --accent:#4d94e8; --hist:#ffd642; --line:#23262e; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font:13px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+  #wrap{position:fixed;inset:0;display:flex;flex-direction:column}
+  header{padding:14px 20px 10px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center;gap:20px}
+  #brand{display:flex;align-items:center;gap:12px;height:30px}
+  #brandword{font:700 15px/30px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;letter-spacing:.01em;white-space:nowrap}
+  #tabs{display:flex;gap:6px}
+  #tabs a,#tabs span{font-size:11.5px;padding:4px 12px;border:1px solid var(--line);
+    border-radius:7px;color:var(--mut);text-decoration:none;background:var(--panel);white-space:nowrap}
+  #tabs span.cur{background:var(--ink);color:#0b0b0b;border-color:var(--ink);font-weight:600}
+  .legend{font-size:11px;color:var(--mut);white-space:nowrap}
+  #chat{flex:1;overflow-y:auto;padding:26px 0;scrollbar-width:none;-ms-overflow-style:none}
+  #chat::-webkit-scrollbar{display:none}
+  #inner{max-width:780px;margin:0 auto;padding:0 20px;display:flex;flex-direction:column;gap:14px}
+  .msg{max-width:88%;padding:10px 14px;border-radius:12px;white-space:pre-wrap;font-size:12.8px}
+  .msg.user{align-self:flex-end;background:#1d2634;border:1px solid #2b3a52;color:var(--ink);
+    border-bottom-right-radius:4px}
+  .msg.bot{align-self:flex-start;background:var(--panel);border:1px solid var(--line);
+    border-bottom-left-radius:4px}
+  .msg.bot b,.msg.bot strong{color:#fff}
+  .msg.bot code{background:#0d0f14;border:1px solid var(--line);border-radius:4px;
+    padding:1px 5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:11.5px;color:var(--ink)}
+  .usage{align-self:flex-start;font-size:10.5px;color:var(--ink,#5d5c56);opacity:.55;
+    margin:-8px 0 0 4px;font-variant-numeric:tabular-nums}
+  /* compare mode: side-by-side historic | full answers */
+  body.compare #inner,body.compare #barin,body.compare #cmpbar{max-width:1100px}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .cell{min-width:0;display:flex;flex-direction:column;gap:6px}
+  .cell .msg{max-width:100%;align-self:stretch}
+  .cell .usage{margin:-2px 0 0 4px}
+  .cellhead{font-size:10px;color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+  .cell.hist .cellhead{color:var(--hist)}
+  .cell.hist .msg.bot{border-color:#4a3f16}
+  .judge{border:1px solid #34305a;background:rgba(28,26,48,.72);border-radius:12px;
+    padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+  .judge .cellhead{color:#a58cff}
+  .judge .jbody{white-space:pre-wrap;font-size:12.8px}
+  .judge .jbody b,.judge .jbody strong{color:#fff}
+  .judge .usage{margin:0 0 0 2px}
+  #hero{display:none;text-align:center;color:var(--ink);font-size:15px;font-weight:600;
+    margin-bottom:18px}
+  #bar{border-top:1px solid var(--line);background:var(--panel);padding:14px 20px}
+  /* fresh state: empty chat hidden, prompt centered in the space BELOW the header */
+  body.fresh #chat{display:none}
+  body.fresh #hero{display:block}
+  body.fresh #bar{border-top:0;background:transparent;margin:auto 0;padding-bottom:10vh}
+  #cmpbar{display:none;grid-template-columns:1fr 1fr;gap:12px;max-width:780px;
+    margin:0 auto 10px;font-size:11px;color:var(--mut);align-items:center}
+  body.compare #cmpbar{display:grid}
+  #cmpl{display:flex;align-items:center;gap:10px;white-space:nowrap}
+  #cut{flex:1;accent-color:var(--hist);min-width:60px}
+  #cutlab{color:var(--hist);font-variant-numeric:tabular-nums}
+  #cmpr{opacity:.8}
+  #barin{max-width:780px;margin:0 auto;display:flex;gap:10px}
+  #q{flex:1;background:#0d0f14;color:var(--ink);border:1px solid var(--line);border-radius:9px;
+    padding:11px 14px;font:inherit;resize:none;height:44px;max-height:140px;outline:none;
+    scrollbar-width:none}
+  #q::-webkit-scrollbar{display:none}
+  #q:focus{border-color:#2b3a52}
+  #cmp{background:var(--panel);color:var(--mut);border:1px solid var(--line);border-radius:9px;
+    padding:0 14px;font:inherit;font-weight:600;cursor:pointer}
+  body.compare #cmp{color:var(--hist);border-color:#5a4d1e;background:#1c180b}
+  #send{background:#1d2634;color:var(--accent);border:1px solid #2b3a52;border-radius:9px;
+    padding:0 20px;font:inherit;font-weight:600;cursor:pointer}
+  #send:disabled{opacity:.4;cursor:default}
+  .cursor{display:inline-block;width:7px;height:13px;background:var(--accent);
+    vertical-align:-2px;animation:blink 1s steps(1) infinite}
+  .cite{display:inline-block;font-size:10px;padding:0 6px;margin:0 2px;border-radius:5px;
+    background:rgba(77,148,232,.13);border:1px solid rgba(77,148,232,.35);color:var(--accent);
+    font-variant-numeric:tabular-nums;cursor:default;vertical-align:1px;white-space:nowrap}
+  .cite.tri{background:rgba(87,220,170,.10);border-color:rgba(87,220,170,.35);color:#57dcaa}
+  #ctip{position:fixed;z-index:40;max-width:360px;background:#101218;border:1px solid #2b3a52;
+    border-radius:8px;padding:8px 11px;font-size:11.5px;line-height:1.45;pointer-events:none;
+    opacity:0;transition:opacity .1s;transform:translateY(calc(-100% - 8px));
+    box-shadow:0 6px 24px rgba(0,0,0,.5)}
+  #ctip b{color:#fff}
+  #ctip .m{color:var(--mut);font-size:10.5px}
+  #ctip .t{margin-top:5px;padding:5px 7px;background:#0d0f14;border:1px solid #23262e;
+    border-radius:5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:10.5px;color:#57dcaa;white-space:pre-wrap}
+  #ctip .t.miss{color:#ff7a6e}
+  @keyframes blink{50%{opacity:0}}
+</style></head>
+<body class="fresh"><div id="wrap">
+  <header>
+    <div id="brand"><span id="brandword">Storydeck</span>
+      <nav id="tabs"><a href="showcase.html">stories</a><a href="geometry.html">geometry</a><span class="cur">query</span><a href="api/stories.zip" download>export</a></nav>
+    </div>
+  </header>
+  <div id="chat"><div id="inner"></div></div>
+  <div id="bar">
+    <div id="hero">Ask the cohort anything.</div>
+    <div id="cmpbar">
+      <div id="cmpl">historic <input id="cut" type="range" min="0" max="0" value="0"><span id="cutlab"></span></div>
+      <div id="cmpr">full corpus — complete history</div>
+    </div>
+    <div id="barin">
+    <textarea id="q" placeholder="ask anything about the cohort…"></textarea>
+    <button id="cmp">compare</button>
+    <button id="send">ask</button>
+  </div></div>
+</div>
+<script>
+const chat=document.getElementById('chat'), inner=document.getElementById('inner');
+const q=document.getElementById('q'), send=document.getElementById('send');
+const cmp=document.getElementById('cmp'), cut=document.getElementById('cut'), cutlab=document.getElementById('cutlab');
+const history=[];        // full-corpus conversation
+let histL=[];            // historic-side conversation (reset on compare toggle)
+let compare=false, busy=false, DATES=[];
+
+// only auto-follow the stream if the user is already pinned near the bottom —
+// scrolling up to read is never yanked back down
+function nearBottom(){ return chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80; }
+function follow(force){ if(force || nearBottom()) chat.scrollTop = chat.scrollHeight; }
+
+function add(cls, text){
+  const d=document.createElement('div'); d.className='msg '+cls; d.textContent=text;
+  inner.appendChild(d); follow(true); return d;
+}
+function usageInto(parent){
+  return u=>{ const d=document.createElement('div'); d.className='usage';
+    d.textContent = u.error ? ('⚠ '+u.error)
+      : `$${u.cost} · ${u.cache_read>0?'cache hit':'cache warm'} · ${u.out} tok out`;
+    parent.appendChild(d); follow(); };
+}
+
+async function streamInto(bot, onUsage, payload, url){
+  bot.innerHTML='<span class="cursor"></span>';
+  let acc='';
+  try{
+    const res=await fetch(url||'api/query',{method:'POST',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    const rd=res.body.getReader(), dec=new TextDecoder();
+    for(;;){
+      const {done,value}=await rd.read();
+      if(done) break;
+      acc+=dec.decode(value,{stream:true});
+      const stick=nearBottom();
+      const c=acc.indexOf('\x1e');
+      const cur = c>=0 ? acc.slice(0,c).trimEnd() : acc;
+      bot.innerHTML = md(cur) + (c<0 ? '<span class="cursor"></span>' : '');
+      if(stick) follow(true);
+    }
+  }catch(e){ acc+='\n\x1e{"error":"'+e.message+'"}'; }
+  const c=acc.indexOf('\x1e');
+  const answer=(c>=0?acc.slice(0,c):acc).trimEnd();
+  bot.innerHTML=md(answer);
+  if(c>=0){ try{ onUsage(JSON.parse(acc.slice(c+1))); }catch(e){} }
+  return answer;
+}
+
+async function ask(){
+  const text=q.value.trim();
+  if(!text||busy) return;
+  busy=true; send.disabled=true; q.value=''; q.style.height='44px';
+  document.body.classList.remove('fresh');   // prompt bar drops to the bottom
+  add('user', text);
+  if(!compare || !DATES.length){
+    history.push({role:'user', content:text});
+    const bot=add('bot','');
+    const ans=await streamInto(bot, usageInto(inner), {messages:history});
+    history.push({role:'assistant', content:ans});
+  }else{
+    const cutoffDate=DATES[+cut.value];
+    history.push({role:'user', content:text});
+    histL.push({role:'user', content:text});
+    const pair=document.createElement('div'); pair.className='pair';
+    const mk=(cls,head)=>{ const c=document.createElement('div'); c.className='cell '+cls;
+      const h=document.createElement('div'); h.className='cellhead'; h.textContent=head;
+      const b=document.createElement('div'); b.className='msg bot';
+      c.appendChild(h); c.appendChild(b); pair.appendChild(c); return {c,b}; };
+    const L=mk('hist','historic · knows through '+fmtDate(cutoffDate));
+    const R=mk('full','full corpus');
+    inner.appendChild(pair); follow(true);
+    const [aL,aR]=await Promise.all([
+      streamInto(L.b, usageInto(L.c), {messages:histL, cutoff:cutoffDate}),
+      streamInto(R.b, usageInto(R.c), {messages:history})]);
+    histL.push({role:'assistant', content:aL});
+    history.push({role:'assistant', content:aR});
+    if(aL && aR){   // judge: synthesize overlap vs divergence below the pair
+      const jc=document.createElement('div'); jc.className='judge';
+      const jh=document.createElement('div'); jh.className='cellhead';
+      jh.textContent='judge · overlap & divergence';
+      const jb=document.createElement('div'); jb.className='jbody';
+      jc.appendChild(jh); jc.appendChild(jb); inner.appendChild(jc); follow(true);
+      await streamInto(jb, usageInto(jc),
+        {question:text, historic:aL, full:aR, cutoff:cutoffDate}, 'api/query/judge');
+    }
+  }
+  busy=false; send.disabled=false; q.focus();
+}
+
+let LEGEND = {};      // meeting index -> {date, title, id}
+const MON=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(d){ return MON[+d.slice(5,7)]+' '+(+d.slice(8,10))+" '"+d.slice(2,4); }
+fetch('api/query/legend').then(r=>r.json()).then(L=>{
+  for(const e of L) LEGEND[e.i]=e;
+  DATES=[...new Set(L.map(e=>e.date).filter(Boolean))].sort();
+  cut.max=DATES.length-1; cut.value=cut.max;
+  cutlab.textContent='through '+fmtDate(DATES[DATES.length-1]);
+}).catch(()=>{});
+cut.addEventListener('input',()=>{ cutlab.textContent='through '+fmtDate(DATES[+cut.value]); });
+cmp.onclick=()=>{
+  compare=!compare;
+  document.body.classList.toggle('compare',compare);
+  if(compare) histL=[];   // historic side starts a fresh conversation each time
+};
+function citeChip(i,j){
+  const e=LEGEND[i];
+  const d=(e&&e.date)?`${MON[+e.date.slice(5,7)]} ${+e.date.slice(8,10)}`:('#'+i);
+  return `<span class="cite${j!=null?' tri':''}" data-i="${i}"${j!=null?` data-j="${j}"`:''}>${d}</span>`;
+}
+// hover tooltip on cite chips: the exact KG triple(s) grounding the claim
+const ctip=document.createElement('div'); ctip.id='ctip'; document.body.appendChild(ctip);
+inner.addEventListener('mouseover',ev=>{
+  const c=ev.target.closest&&ev.target.closest('.cite'); if(!c) return;
+  const e=LEGEND[+c.dataset.i]; if(!e) return;
+  let h='<b>'+esc(e.title||'')+'</b><div class="m">'+esc(e.date||'')+'</div>';
+  if(c.dataset.j!=null && c.dataset.j!==''){
+    const t=(e.triples||[])[+c.dataset.j];
+    h+= t ? '<div class="t">'+esc(t)+'</div>'
+          : '<div class="t miss">triple ('+esc(c.dataset.j)+') not found — unverified citation</div>';
+  }else if(e.triples&&e.triples.length){
+    h+='<div class="m">meeting-level · '+e.triples.length+' triples mined</div>';
+  }
+  ctip.innerHTML=h;
+  const r=c.getBoundingClientRect();
+  ctip.style.left=Math.max(8,Math.min(innerWidth-368,r.left-10))+'px';
+  ctip.style.top=r.top+'px';
+  ctip.style.opacity=1;
+});
+inner.addEventListener('mouseout',ev=>{
+  if(ev.target.closest&&ev.target.closest('.cite')) ctip.style.opacity=0;
+});
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function md(s){          // lightweight markdown on escaped text (bot messages only)
+  return esc(s)
+    .replace(/^#{1,3}\s+(.+)$/gm, '<strong>$1</strong>')           // # headers → bold line
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')                    // `code`
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')          // **bold**
+    .replace(/(^|[^*])\*([^\s*][^*\n]*?)\*(?!\*)/g, '$1<em>$2</em>') // *italic*
+    // [#i] / [#i.j] chips, tolerant of comma lists and ranges the model
+    // sometimes emits: [#292.85, #292.86], [#292.85-87], [#12.3][#12.4]
+    .replace(/\[#([\d.#,\s–-]+)\]/g, (m,body)=>{
+      const chips=[];
+      for(let p of body.split(',')){
+        p=p.trim().replace(/^#/,'');
+        let mm=p.match(/^(\d+)(?:\.(\d+))?$/);
+        if(mm){ chips.push([+mm[1], mm[2]==null?null:+mm[2]]); continue; }
+        mm=p.match(/^(\d+)\.(\d+)\s*[-–]\s*(?:(\d+)\.)?(\d+)$/);   // i.a-b / i.a-i.b
+        if(mm){
+          const i=+mm[1], a=+mm[2], b=+mm[4];
+          if(b>=a && b-a<=9){ for(let j=a;j<=b;j++) chips.push([i,j]); continue; }
+        }
+        return m;   // anything unrecognized: leave the tag as plain text
+      }
+      return chips.map(([i,j])=>citeChip(i,j)).join('');
+    });
+}
+send.onclick=ask;
+q.addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); ask(); } });
+q.addEventListener('input',()=>{ q.style.height='44px'; q.style.height=Math.min(140,q.scrollHeight)+'px'; });
+q.focus();
+</script></body></html>
