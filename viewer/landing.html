@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storydeck</title>
+<style>
+  :root{ --bg:#08090c; --panel:rgba(16,18,24,.92); --ink:#e8e6df; --mut:#9a9890;
+         --accent:#4d94e8; --line:#23262e; }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  #wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;padding:40px 20px;text-align:center}
+  h1{font-size:56px;letter-spacing:.02em;margin:0 0 10px;cursor:pointer;user-select:none;
+    background:linear-gradient(120deg,#63a8ff,#57dcaa 55%,#a58cff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    transition:filter .25s}
+  h1:hover{filter:brightness(1.25) drop-shadow(0 0 22px rgba(77,148,232,.35))}
+  #tag{color:var(--mut);max-width:520px;margin:0 auto 26px;font-size:14.5px}
+  #gh{display:inline-block;font-size:13px;padding:8px 18px;border:1px solid var(--line);
+    border-radius:9px;color:var(--ink);text-decoration:none;background:var(--panel)}
+  #gh:hover{border-color:#2b3a52}
+  #gate{display:none;margin-top:30px}
+  #gate.open{display:block;animation:rise .25s ease}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1}}
+  #pw{background:#0d0f14;color:var(--ink);border:1px solid var(--line);border-radius:9px;
+    padding:10px 14px;font:inherit;width:260px;outline:none;text-align:center}
+  #pw:focus{border-color:#2b3a52}
+  #go{background:#1d2634;color:var(--accent);border:1px solid #2b3a52;border-radius:9px;
+    padding:10px 18px;font:inherit;font-weight:600;cursor:pointer;margin-left:8px}
+  #msg{min-height:20px;margin-top:10px;font-size:12px;color:#ef6a68}
+  #hint{margin-top:6px;font-size:11.5px;color:var(--mut)}
+  footer{color:#5d5c56;font-size:11px;padding:18px}
+</style></head>
+<body><div id="wrap">
+  <div>
+    <h1 id="title" title="enter">Storydeck</h1>
+    <div id="tag">Turn a vault of meeting transcripts into an explorable, grounded story
+      system — mined knowledge-graph triples powering story decks, a temporal
+      collaboration graph, and a cited chat oracle with time-travel compare mode.</div>
+    <a id="gh" href="https://github.com/bstadt/storydeck">github.com/bstadt/storydeck</a>
+    <div id="gate">
+      <div>
+        <input id="pw" type="password" placeholder="password" autocomplete="current-password">
+        <button id="go">enter</button>
+      </div>
+      <div id="msg"></div>
+      <div id="hint">this instance hosts a private corpus — access requires a password</div>
+    </div>
+  </div>
+</div>
+<footer>storydeck</footer>
+<script>
+const gate=document.getElementById('gate'), pw=document.getElementById('pw');
+const msg=document.getElementById('msg'), go=document.getElementById('go');
+document.getElementById('title').onclick=()=>{ gate.classList.add('open'); pw.focus(); };
+async function unlock(){
+  msg.textContent='';
+  const r=await fetch('api/unlock',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({password:pw.value})});
+  if(r.ok){ location.href='showcase.html'; }
+  else{ msg.textContent='wrong password'; pw.select(); }
+}
+go.onclick=unlock;
+pw.addEventListener('keydown',e=>{ if(e.key==='Enter') unlock(); });
+</script></body></html>

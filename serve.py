@@ -11,16 +11,20 @@ Activation runs in a background thread (narrative generation is an LLM call, ~30
 Run: python3 serve.py   →  http://localhost:8811/showcase.html
 """
 import glob
+import hashlib
+import hmac
 import io
 import json
 import os
 import re
+import secrets as pysecrets
 import threading
+import time
 import traceback
 import uuid
 import zipfile
 
-from flask import Flask, request, jsonify, send_from_directory, send_file
+from flask import Flask, request, jsonify, redirect, send_from_directory, send_file
 
 import pipeline
 import instance_config
@@ -28,7 +32,60 @@ import instance_config
 HERE = os.path.dirname(os.path.abspath(__file__))
 VIEWER = os.path.join(HERE, "viewer")
 
+# load .env at import so the gate + API key work under gunicorn too
+for _line in (open(os.path.join(HERE, ".env")) if os.path.exists(os.path.join(HERE, ".env")) else []):
+    if "=" in _line and not _line.strip().startswith("#"):
+        _k, _v = _line.strip().split("=", 1)
+        os.environ.setdefault(_k, _v)
+
 app = Flask(__name__, static_folder=None)
+
+# ---------------- password gate ----------------
+# With STORYDECK_PASSWORD set (deployments), everything except the landing
+# page and the unlock endpoint requires a signed auth cookie. No corpus data,
+# viewer page, or API response is reachable without it. The token is derived
+# from a per-boot secret, so a restart invalidates all sessions.
+AUTH_COOKIE = "sd_auth"
+_boot_secret = pysecrets.token_hex(32)
+PUBLIC_PATHS = {"/", "/api/unlock", "/favicon.ico", "/robots.txt"}
+
+
+def _auth_token():
+    return hmac.new(_boot_secret.encode(), b"storydeck-unlocked", hashlib.sha256).hexdigest()
+
+
+def _authed():
+    return hmac.compare_digest(request.cookies.get(AUTH_COOKIE, ""), _auth_token())
+
+
+@app.before_request
+def _gate():
+    if not os.environ.get("STORYDECK_PASSWORD"):
+        return None                     # no password configured (local dev): open
+    if request.path in PUBLIC_PATHS or _authed():
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "locked"}), 401
+    return redirect("/")
+
+
+@app.post("/api/unlock")
+def unlock():
+    pw = os.environ.get("STORYDECK_PASSWORD") or ""
+    got = ((request.get_json(silent=True) or {}).get("password") or "")
+    time.sleep(0.6)                     # brute-force damper
+    if pw and hmac.compare_digest(got.encode(), pw.encode()):
+        resp = jsonify({"ok": True})
+        resp.set_cookie(AUTH_COOKIE, _auth_token(), httponly=True, samesite="Lax",
+                        secure=request.headers.get("X-Forwarded-Proto") == "https",
+                        max_age=7 * 86400)
+        return resp
+    return jsonify({"error": "wrong password"}), 403
+
+
+@app.get("/robots.txt")
+def robots():
+    return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text/plain"}
 jobs = {}          # job_id -> {status, log, subject}
 job_lock = threading.Lock()
 activate_lock = threading.Lock()   # serialize activations (single API budget)
@@ -360,7 +417,12 @@ def job_status(job):
 
 @app.get("/")
 def root():
-    resp = send_from_directory(VIEWER, "showcase.html")
+    """Locked deployments land on the public landing page; unlocked sessions
+    (and passwordless local dev) go straight to the experience."""
+    page = "showcase.html"
+    if os.environ.get("STORYDECK_PASSWORD") and not _authed():
+        page = "landing.html"
+    resp = send_from_directory(VIEWER, page)
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
