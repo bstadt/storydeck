@@ -10,7 +10,7 @@
     font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden}
   #stage{position:fixed;inset:0;z-index:0;opacity:.75}
   #wrap{position:relative;z-index:1;min-height:100%;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;padding:40px 20px;text-align:center;
+    align-items:center;justify-content:flex-start;padding:54px 20px 0;text-align:center;
     pointer-events:none}
   #wrap > div{pointer-events:auto}
   h1{font-size:56px;letter-spacing:.02em;margin:0 0 10px;color:#fff;user-select:none;
@@ -84,7 +84,7 @@ const ISO=new THREE.Vector3(Math.cos(deg(15))*Math.sin(deg(45)),Math.sin(deg(15)
   Math.cos(deg(15))*Math.cos(deg(45))).normalize();
 camera.position.copy(ISO.clone().multiplyScalar(400));
 const CW=44, CH=30, DZ=16;
-camera.lookAt(0,CH/2+2,0);
+camera.lookAt(0,CH/2+13,0);   // scene sits below the header block
 setFrustum();
 addEventListener('resize',()=>{ setFrustum(); renderer.setSize(innerWidth,innerHeight); });
 const _faceQuat=camera.quaternion.clone(), _IDENT=new THREE.Quaternion();
