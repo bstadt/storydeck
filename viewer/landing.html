@@ -89,7 +89,7 @@ function draw(now){
     lift=Math.sin(Math.min(1,p-focus)*Math.PI); }
   else if(t<T_EX+T_PG+T_CO){ spread=1-ease((t-T_EX-T_PG)/T_CO); }
   else spread=0;
-  const cx=W/2, cy=H*0.56;
+  const cx=W/2, cy=H*0.66;   // below the text band
   const gap=Math.min(110,(W-260)/N);
   for(let i=0;i<N;i++){
     const d=i-(N-1)/2;
