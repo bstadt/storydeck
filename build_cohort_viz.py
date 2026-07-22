@@ -853,25 +853,14 @@ HTML = r"""<!doctype html>
   #tip .meta{color:var(--mut);margin:3px 0 5px;font-size:11px}
   #tip .r{color:var(--mut);display:flex;justify-content:space-between;gap:14px}
   #tip .r span:last-child{color:var(--ink);font-variant-numeric:tabular-nums}
-  /* Apple-Stocks style ranking panel */
-  #stocks{position:absolute;top:12px;right:14px;bottom:12px;width:min(26%,300px);
+  /* right column: influence-over-time line chart */
+  #stocks{position:absolute;top:12px;right:14px;bottom:12px;width:min(42%,560px);
     display:flex;flex-direction:column;background:var(--panel);border:1px solid var(--line);
     border-radius:10px;z-index:5;overflow:hidden}
-  #mets{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
-  #mets button{font-size:11.5px;padding:4px 11px;border-radius:6px}
-  #mets button.on{background:#1d2634;color:var(--accent);border-color:#2b3a52}
-  #rowbox{flex:1;position:relative;overflow-y:auto;overflow-x:hidden}
-  #rowinner{position:relative}
-  .row{position:absolute;left:0;right:0;height:34px;display:flex;align-items:center;gap:10px;
-    padding:0 12px;border-bottom:1px solid rgba(35,38,46,.6);cursor:default;
-    transition:transform .5s cubic-bezier(.4,0,.2,1), opacity .3s}
-  .row .nm{flex:1;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .row.hot{background:rgba(77,148,232,.08)}
-  .badge{min-width:62px;text-align:center;border-radius:6px;padding:3px 7px;flex:none;
-    font-size:11px;font-variant-numeric:tabular-nums;background:#1a1e27;color:var(--mut)}
-  .badge.up{background:rgba(47,211,154,.16);color:var(--up)}
-  .badge.dn{background:rgba(239,106,104,.16);color:var(--dn)}
-  .badge.inf{background:rgba(77,148,232,.14);color:var(--accent)}
+  #charthead{padding:10px 14px 6px;font-size:11.5px;color:var(--mut);
+    border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+  #charthead b{color:var(--ink);font-weight:600}
+  #chart{flex:1;width:100%;cursor:crosshair}
   .comm{margin-bottom:14px;padding:6px 8px 12px;border-bottom:1px solid rgba(35,38,46,.6);
     border-radius:8px;cursor:default;transition:background .12s}
   .comm.hot{background:rgba(77,148,232,.08)}
@@ -890,11 +879,8 @@ HTML = r"""<!doctype html>
   <div id="stage">
     <canvas id="c"></canvas><div id="tip"></div>
     <div id="stocks">
-      <div id="mets">
-        <button data-m="inf" class="on">influence</button>
-        <button data-m="do">Δ influence</button>
-      </div>
-      <div id="rowbox"><div id="rowinner"></div></div>
+      <div id="charthead"><b>influence over time</b><span>hover a line or a node · drag to scrub</span></div>
+      <canvas id="chart"></canvas>
     </div>
   </div>
   <div id="controls">
@@ -918,7 +904,7 @@ function resize(){ DPR=window.devicePixelRatio||1; const r=cv.getBoundingClientR
 window.addEventListener('resize',resize);
 
 let vs=1,vx=0,vy=0,vdrag=null;   // viewport: screen = base*vs + (vx,vy)
-function stocksW(){ return Math.min(W*0.26,300)+28; }
+function stocksW(){ return Math.min(W*0.42,560)+28; }
 function px(){ const mx=70,my=44,RGT=W-stocksW()-40;
   return D.nodes.map(n=>({x:(mx+n.x*(RGT-mx))*vs+vx,y:(my+n.y*(H-my-56))*vs+vy,label:n.label})); }
 
@@ -1090,46 +1076,76 @@ function draw(){
   }
 }
 
-// ---------- Apple-Stocks style ranking panel ----------
-const ROWH=34; let rowEls=[];
-function rowsInit(){
-  const box=document.getElementById('rowinner');
-  box.style.height=(D.nodes.length*ROWH)+'px';
-  rowEls=D.nodes.map((n,i)=>{
-    const r=document.createElement('div'); r.className='row';
-    r.innerHTML=`<span class="nm">${n.label}</span><span class="badge">—</span>`;
-    r.onmouseenter=()=>{hover=i; rowsHot();}; r.onmouseleave=()=>{hover=-1; rowsHot();};
-    box.appendChild(r);
-    return r;
-  });
-}
-function rowsHot(){ rowEls.forEach((r,i)=>r.classList.toggle('hot',i===hover)); }
-function metricVals(){
+// ---------- influence-over-time line chart (right column) ----------
+const ch=document.getElementById('chart'), cx2=ch.getContext('2d');
+let chDrag=false;
+function chartRect(){ const r=ch.getBoundingClientRect();
+  return {w:r.width,h:r.height,ml:40,mr:14,mt:12,mb:24}; }
+function drawChart(){
+  const R=chartRect(); if(R.w<40) return;
+  if(ch.width!==Math.round(R.w*DPR)){ ch.width=Math.round(R.w*DPR); ch.height=Math.round(R.h*DPR); }
+  cx2.setTransform(DPR,0,0,DPR,0,0); cx2.clearRect(0,0,R.w,R.h);
+  const S=series(gran), n=NA(), fr=S.frames;
+  const w=R.w-R.ml-R.mr, h=R.h-R.mt-R.mb;
+  let mx=1e-9; for(const f of fr) for(const v of f) if(v>mx) mx=v;
+  const X=k=>R.ml+w*k/Math.max(1,n-1), Y=v=>R.mt+h*(1-v/mx);
+  // y grid (values on the same x10 scale the panel used)
+  cx2.font='10px -apple-system,sans-serif'; cx2.textAlign='right'; cx2.textBaseline='middle';
+  for(let g=0;g<=3;g++){ const v=mx*g/3, y=Y(v);
+    cx2.strokeStyle='rgba(232,230,223,0.05)'; cx2.beginPath();
+    cx2.moveTo(R.ml,y); cx2.lineTo(R.w-R.mr,y); cx2.stroke();
+    cx2.fillStyle='rgba(154,152,144,0.7)'; cx2.fillText((v*10).toFixed(0),R.ml-6,y); }
+  // x ticks: sparse frame labels
+  cx2.textAlign='center'; cx2.textBaseline='top';
+  const step=Math.max(1,Math.ceil(n/6));
+  for(let k=0;k<n;k+=step){ cx2.fillStyle='rgba(154,152,144,0.7)';
+    cx2.fillText(AX[gran][k],X(k),R.h-R.mb+6); }
+  // all lines dim; hovered line bright and drawn last
   const N=D.nodes.length;
-  if(metric==='inf'){ return (ST||compute()).pr.slice(); }
-  const S=series(gran), k=frameOn(gran);   // 'do': Δ influence since program start
-  const out=new Array(N);
-  for(let i=0;i<N;i++) out[i]=S.frames[k][i]-S.frames[0][i];
-  return out;
+  const line=(i,style,lw)=>{ cx2.strokeStyle=style; cx2.lineWidth=lw; cx2.beginPath();
+    for(let k=0;k<n;k++){ const x=X(k),y=Y(fr[k][i]); k?cx2.lineTo(x,y):cx2.moveTo(x,y); }
+    cx2.stroke(); };
+  for(let i=0;i<N;i++) if(i!==hover) line(i,'rgba(77,148,232,0.20)',1);
+  // playhead synced with the network's timeline
+  const px_=X(Math.max(0,Math.min(n-1,t)));
+  cx2.strokeStyle='rgba(232,230,223,0.25)'; cx2.lineWidth=1;
+  cx2.beginPath(); cx2.moveTo(px_,R.mt); cx2.lineTo(px_,R.h-R.mb); cx2.stroke();
+  if(hover>=0){
+    line(hover,'#9cc4ff',1.8);
+    const k=Math.max(0,Math.min(n-1,Math.round(t)));
+    const vy=Y(fr[k][hover]);
+    cx2.fillStyle='#9cc4ff'; cx2.beginPath(); cx2.arc(px_,vy,3,0,7); cx2.fill();
+    cx2.textAlign='left'; cx2.textBaseline='bottom'; cx2.font='11px -apple-system,sans-serif';
+    const lbl=D.nodes[hover].label+' · '+(fr[k][hover]*10).toFixed(1);
+    const tw=cx2.measureText(lbl).width;
+    const lx=Math.min(px_+8,R.w-R.mr-tw), ly=Math.max(R.mt+12,vy-6);
+    cx2.fillStyle='rgba(8,9,12,0.75)'; cx2.fillRect(lx-3,ly-13,tw+6,15);
+    cx2.fillStyle='#e8e6df'; cx2.fillText(lbl,lx,ly);
+  }
 }
-let lastStockKey='';
-function updateStocks(force){
-  const key=metric+'|'+gran+'|'+mode+'|'+Math.round(t*4)/4+'|'+hover;
-  if(!force && key===lastStockKey) return;
-  lastStockKey=key;
-  const vals=metricVals();
-  const order=[...Array(D.nodes.length).keys()].sort((a,b)=>vals[b]-vals[a]);
-  const rank=new Array(D.nodes.length);
-  order.forEach((i,pos)=>rank[i]=pos);
-  rowEls.forEach((r,i)=>{
-    r.style.transform=`translateY(${rank[i]*ROWH}px)`;
-    const b=r.querySelector('.badge');
-    if(metric==='inf'){ b.className='badge inf'; b.textContent=(vals[i]*10).toFixed(1); }
-    else{ const v=vals[i]*10;
-      b.className='badge '+(v>0.05?'up':(v<-0.05?'dn':''));
-      b.textContent=(v>0?'+':'')+v.toFixed(1); }
-  });
-}
+function chartT(ev){ const r=ch.getBoundingClientRect(), R=chartRect();
+  const n=NA(); return Math.max(0,Math.min(n-1,(ev.clientX-r.left-R.ml)/(R.w-R.ml-R.mr)*(n-1))); }
+ch.addEventListener('mousedown',ev=>{ chDrag=true; playing=false;
+  document.getElementById('play').textContent='▶ Play';
+  t=chartT(ev); document.getElementById('scrub').value=t/(NA()-1); });
+window.addEventListener('mouseup',()=>{ chDrag=false; });
+ch.addEventListener('mousemove',ev=>{
+  if(chDrag){ t=chartT(ev); document.getElementById('scrub').value=t/(NA()-1); return; }
+  const r=ch.getBoundingClientRect(), R=chartRect();
+  const S=series(gran), n=NA(), fr=S.frames;
+  let mx=1e-9; for(const f of fr) for(const v of f) if(v>mx) mx=v;
+  const kf=(ev.clientX-r.left-R.ml)/(R.w-R.ml-R.mr)*(n-1);
+  const k0=Math.max(0,Math.min(n-1,Math.floor(kf))), k1=Math.min(n-1,k0+1), f=kf-k0;
+  const my=ev.clientY-r.top, h=R.h-R.mt-R.mb;
+  let best=-1,bd=9;
+  for(let i=0;i<D.nodes.length;i++){
+    const v=fr[k0][i]+(fr[k1][i]-fr[k0][i])*Math.max(0,Math.min(1,f));
+    const y=R.mt+h*(1-v/mx);
+    const d=Math.abs(y-my); if(d<bd){bd=d;best=i;}
+  }
+  hover=best;
+});
+ch.addEventListener('mouseleave',()=>{ if(!chDrag) hover=-1; });
 
 function frameLabel(){ const lo=Math.floor(t),f=t-lo,A=AX[gran];
   return f<0.5?A[lo]:A[Math.min(NA()-1,lo+1)]; }
@@ -1138,7 +1154,7 @@ function tick(){
     if(t>=NA()-1){ t=NA()-1; playing=false; document.getElementById('play').textContent='▶ Play'; }
     document.getElementById('scrub').value=t/(NA()-1); }
   document.getElementById('frame').textContent=frameLabel();
-  draw(); updateStocks();
+  draw(); drawChart();
   requestAnimationFrame(tick);
 }
 
@@ -1146,11 +1162,6 @@ document.getElementById('play').onclick=function(){ playing=!playing;
   if(playing&&t>=NA()-1)t=0; this.textContent=playing?'❚❚ Pause':'▶ Play'; };
 document.getElementById('scrub').oninput=function(){ t=(+this.value)*(NA()-1); playing=false;
   document.getElementById('play').textContent='▶ Play'; };
-for(const b of document.querySelectorAll('#mets button'))
-  b.onclick=()=>{ metric=b.dataset.m;
-    for(const x of document.querySelectorAll('#mets button')) x.classList.toggle('on',x===b);
-    updateStocks(true); };
-
 cv.style.cursor='grab';
 cv.addEventListener('mousedown',ev=>{
   vdrag={x:ev.clientX,y:ev.clientY,vx,vy};
@@ -1175,7 +1186,7 @@ cv.addEventListener('mousemove',ev=>{
   let best=-1,bd=1e9;
   for(let i=0;i<D.nodes.length;i++){ const rr=5+27*Math.sqrt(Math.min(1,(inS[i]+outS[i])/md));
     const d=Math.hypot(P[i].x-mx,P[i].y-my); if(d<rr+6&&d<bd){bd=d;best=i;} }
-  hover=best; rowsHot();
+  hover=best;
   if(best>=0&&ST){
     const {inS,outS,E,pr}=ST;
     const rows=[];
@@ -1192,8 +1203,8 @@ cv.addEventListener('mousemove',ev=>{
     tip.style.left=tx+'px'; tip.style.top=ty+'px';
   } else tip.style.opacity=0;
 });
-cv.addEventListener('mouseleave',()=>{hover=-1;rowsHot();tip.style.opacity=0;});
-resize(); rowsInit(); requestAnimationFrame(tick);
+cv.addEventListener('mouseleave',()=>{hover=-1;tip.style.opacity=0;});
+resize(); requestAnimationFrame(tick);
 </script></body></html>"""
 
 
